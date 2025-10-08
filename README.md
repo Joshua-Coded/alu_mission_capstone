@@ -36,13 +36,14 @@ Frontend runs on `http://localhost:3000`
 ---
 
 ### Designs
-Screenshots available in `/screenshots` folder:
-- login.png
-- dashboard.png
-- farmer-profile.png
-- project-submission.png
-- verification-process.png
+### Designs
 
+| Screenshot | Description |
+|------------|-------------|
+| ![](screenshots/home-page.png) | Home Page |
+| ![](screenshots/farmer-dashboard.png) | Farmer Dashboard |
+| ![](screenshots/contributor-dashboard.png) | Contributor Dashboard |
+| ![](screenshots/government-dashboard.png) | Government Official Dashboard |
 ---
 
 ### Deployment Plan
