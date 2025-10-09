@@ -2,7 +2,10 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AuthModule } from "./auth/auth.module";
+import { CloudinaryModule } from "./cloudinary/cloudinary.module";
 import { EmailModule } from "./email/email.module";
+import { ProjectsModule } from "./projects/projects.module";
+import { UploadModule } from "./upload/upload.module";
 import { UsersModule } from "./users/users.module";
 
 @Module({
@@ -33,10 +36,13 @@ import { UsersModule } from "./users/users.module";
       },
     }),
 
-    // Feature modules - ADD THESE
+    // Feature modules
     AuthModule,
     UsersModule,
     EmailModule,
+    ProjectsModule,
+    CloudinaryModule,
+    UploadModule,
   ],
   controllers: [],
   providers: [],
