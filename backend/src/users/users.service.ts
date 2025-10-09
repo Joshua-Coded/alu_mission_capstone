@@ -8,8 +8,7 @@ import { User, UserDocument } from "./schemas/user.schema";
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
-  // Add this method to UsersService
-async create(createUserDto: Partial<User>): Promise<UserDocument> {
+  async create(createUserDto: Partial<User>): Promise<UserDocument> {
     try {
       const createdUser = new this.userModel(createUserDto);
       return await createdUser.save();
@@ -17,15 +16,12 @@ async create(createUserDto: Partial<User>): Promise<UserDocument> {
       if (error?.code === 11000) {
         const field = Object.keys(error.keyPattern || {})[0];
         
-        // Special handling for walletAddress conflicts when no wallet is provided
         if (field === 'walletAddress' && !createUserDto.walletAddress) {
-          // Try again with a random temporary value, then remove it
           const tempWallet = `temp_${Date.now()}_${Math.random()}`;
           const userData = { ...createUserDto, walletAddress: tempWallet };
           const user = new this.userModel(userData);
           const savedUser = await user.save();
           
-          // Remove the temporary wallet address
           savedUser.walletAddress = undefined;
           return await savedUser.save();
         }
@@ -94,5 +90,35 @@ async create(createUserDto: Partial<User>): Promise<UserDocument> {
 
   async findByRole(role: UserRole): Promise<UserDocument[]> {
     return this.userModel.find({ role, isActive: true }).select('-password').exec();
+  }
+
+  // ==================== PASSWORD RESET METHODS ====================
+
+  async updatePasswordResetToken(id: string, token: string, expires: Date): Promise<void> {
+    await this.userModel.findByIdAndUpdate(
+      id,
+      { 
+        passwordResetToken: token,
+        passwordResetTokenExpires: expires
+      }
+    ).exec();
+  }
+
+  async findByPasswordResetToken(token: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ 
+      passwordResetToken: token,
+      passwordResetTokenExpires: { $gt: new Date() }
+    }).exec();
+  }
+
+  async updatePassword(id: string, hashedPassword: string): Promise<void> {
+    await this.userModel.findByIdAndUpdate(
+      id,
+      { 
+        password: hashedPassword,
+        passwordResetToken: undefined,
+        passwordResetTokenExpires: undefined
+      }
+    ).exec();
   }
 }

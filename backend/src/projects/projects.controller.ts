@@ -16,6 +16,10 @@ import {
   import { ProjectsService } from './projects.service';
   import { CreateProjectDto } from './dto/create-project.dto';
   import { UpdateProjectDto } from './dto/update-project.dto';
+  import { AssignDueDiligenceDto } from './dto/assign-due-diligence.dto';
+  import { UpdateDueDiligenceDto } from './dto/update-due-diligence.dto';
+  import { VerifyProjectDto } from './dto/verify-project.dto';
+  import { RejectProjectDto } from './dto/reject-project.dto';
   import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
   import { RolesGuard } from '../auth/guards/roles.guard';
   import { Roles } from '../auth/decorators/roles.decorator';
@@ -52,20 +56,6 @@ import {
     @ApiResponse({ status: 200, description: 'Returns farmer projects' })
     async getMyProjects(@Req() req: RequestWithUser, @Query('status') status?: string) {
       return this.projectsService.findByFarmer(req.user.userId, status);
-    }
-  
-    @Get(':id')
-    @ApiOperation({ summary: 'Get project by ID' })
-    @ApiResponse({ status: 200, description: 'Returns project details' })
-    async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
-      const project = await this.projectsService.findOne(id);
-      
-      // Check if user has permission to view
-      if (req.user.role === UserRole.FARMER && project.farmer.toString() !== req.user.userId) {
-        throw new HttpException('Unauthorized to view this project', HttpStatus.FORBIDDEN);
-      }
-      
-      return project;
     }
   
     @Patch(':id')
@@ -138,6 +128,71 @@ import {
       return this.projectsService.submitForReview(id);
     }
   
+    // ==================== GOVERNMENT ENDPOINTS ====================
+  
+    @Get('pending/review')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Get projects pending review (Government only)' })
+    @ApiResponse({ status: 200, description: 'Returns projects pending review' })
+    async getPendingProjects() {
+      return this.projectsService.findPendingProjects();
+    }
+  
+    @Get('my-assigned')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Get my assigned projects (Government only)' })
+    @ApiResponse({ status: 200, description: 'Returns assigned projects' })
+    async getMyAssignedProjects(@Req() req: RequestWithUser) {
+      return this.projectsService.getMyAssignedProjects(req.user.userId);
+    }
+  
+    @Post(':id/assign')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Assign project for due diligence (Government only)' })
+    @ApiResponse({ status: 200, description: 'Project assigned successfully' })
+    async assignDueDiligence(
+      @Param('id') id: string,
+      @Body() assignDto: AssignDueDiligenceDto,
+    ) {
+      return this.projectsService.assignDueDiligence(id, assignDto.governmentOfficialId);
+    }
+  
+    @Patch(':id/due-diligence')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Update due diligence (Government only)' })
+    @ApiResponse({ status: 200, description: 'Due diligence updated' })
+    async updateDueDiligence(
+      @Param('id') id: string,
+      @Body() updateDto: UpdateDueDiligenceDto,
+      @Req() req: RequestWithUser,
+    ) {
+      return this.projectsService.updateDueDiligence(id, req.user.userId, updateDto);
+    }
+  
+    @Post(':id/verify')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Verify and approve project (Government only)' })
+    @ApiResponse({ status: 200, description: 'Project verified successfully' })
+    async verifyProject(
+      @Param('id') id: string,
+      @Body() verifyDto: VerifyProjectDto,
+      @Req() req: RequestWithUser,
+    ) {
+      return this.projectsService.verifyProject(id, req.user.userId, verifyDto.notes);
+    }
+  
+    @Post(':id/reject')
+    @Roles(UserRole.GOVERNMENT)
+    @ApiOperation({ summary: 'Reject project (Government only)' })
+    @ApiResponse({ status: 200, description: 'Project rejected' })
+    async rejectProject(
+      @Param('id') id: string,
+      @Body() rejectDto: RejectProjectDto,
+      @Req() req: RequestWithUser,
+    ) {
+      return this.projectsService.rejectProject(id, req.user.userId, rejectDto.reason);
+    }
+  
     // ==================== CONTRIBUTOR ENDPOINTS ====================
   
     @Get('verified/list')
@@ -151,22 +206,59 @@ import {
       return this.projectsService.findVerifiedProjects(category, location);
     }
   
-    // ==================== GOVERNMENT ENDPOINTS ====================
-  
-    @Get('pending/review')
-    @Roles(UserRole.GOVERNMENT)
-    @ApiOperation({ summary: 'Get projects pending review (Government only)' })
-    @ApiResponse({ status: 200, description: 'Returns projects pending review' })
-    async getPendingProjects() {
-      return this.projectsService.findPendingProjects();
+    @Post(':id/favorite')
+    @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER)
+    @ApiOperation({ summary: 'Add project to favorites' })
+    @ApiResponse({ status: 200, description: 'Project added to favorites' })
+    async addToFavorites(@Param('id') id: string, @Req() req: RequestWithUser) {
+      return this.projectsService.addToFavorites(req.user.userId, id);
     }
   
-    // ==================== ADMIN/STATS ENDPOINTS ====================
+    @Delete(':id/favorite')
+    @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER)
+    @ApiOperation({ summary: 'Remove project from favorites' })
+    @ApiResponse({ status: 200, description: 'Project removed from favorites' })
+    async removeFromFavorites(@Param('id') id: string, @Req() req: RequestWithUser) {
+      return this.projectsService.removeFromFavorites(req.user.userId, id);
+    }
+  
+    @Get('favorites')
+    @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER)
+    @ApiOperation({ summary: 'Get my favorite projects' })
+    @ApiResponse({ status: 200, description: 'Returns favorite projects' })
+    async getFavorites(@Req() req: RequestWithUser) {
+      return this.projectsService.getFavorites(req.user.userId);
+    }
+  
+    @Get(':id/is-favorite')
+    @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER)
+    @ApiOperation({ summary: 'Check if project is favorited' })
+    @ApiResponse({ status: 200, description: 'Returns favorite status' })
+    async isFavorite(@Param('id') id: string, @Req() req: RequestWithUser) {
+      const isFavorite = await this.projectsService.isFavorite(req.user.userId, id);
+      return { isFavorite };
+    }
+  
+    // ==================== SHARED ENDPOINTS ====================
   
     @Get('stats/dashboard')
     @ApiOperation({ summary: 'Get platform statistics' })
     @ApiResponse({ status: 200, description: 'Returns platform stats' })
     async getStats() {
       return this.projectsService.getStats();
+    }
+  
+    @Get(':id')
+    @ApiOperation({ summary: 'Get project by ID' })
+    @ApiResponse({ status: 200, description: 'Returns project details' })
+    async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
+      const project = await this.projectsService.findOne(id);
+      
+      // Check if user has permission to view
+      if (req.user.role === UserRole.FARMER && project.farmer.toString() !== req.user.userId) {
+        throw new HttpException('Unauthorized to view this project', HttpStatus.FORBIDDEN);
+      }
+      
+      return project;
     }
   }

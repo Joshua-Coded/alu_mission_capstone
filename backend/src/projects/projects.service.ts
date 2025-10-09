@@ -1,15 +1,19 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { randomUUID } from "crypto";
+import { createHash } from "crypto";
 import { Model } from "mongoose";
 import { CreateProjectDto } from "./dto/create-project.dto";
+import { UpdateDueDiligenceDto } from "./dto/update-due-diligence.dto";
 import { UpdateProjectDto } from "./dto/update-project.dto";
+import { Favorite, FavoriteDocument } from "./schemas/favorite.schema";
 import { Project, ProjectDocument } from "./schemas/project.schema";
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
+    @InjectModel(Favorite.name) private favoriteModel: Model<FavoriteDocument>,
   ) {}
 
   // ==================== FARMER METHODS ====================
@@ -103,6 +107,170 @@ export class ProjectsService {
     return project;
   }
 
+  // ==================== GOVERNMENT METHODS ====================
+
+  async findPendingProjects(): Promise<ProjectDocument[]> {
+    return this.projectModel
+      .find({ status: 'submitted' })
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .sort({ createdAt: 1 })
+      .exec();
+  }
+
+  async getMyAssignedProjects(officialId: string): Promise<ProjectDocument[]> {
+    return this.projectModel
+      .find({ 
+        'dueDiligence.assignedTo': officialId,
+        status: { $in: ['under_review', 'active'] }
+      })
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .sort({ 'dueDiligence.startedAt': -1 })
+      .exec();
+  }
+
+  async assignDueDiligence(projectId: string, officialId: string): Promise<ProjectDocument> {
+    const project = await this.projectModel
+      .findByIdAndUpdate(
+        projectId,
+        {
+          $set: {
+            status: 'under_review',
+            'dueDiligence.assignedTo': officialId,
+            'dueDiligence.status': 'in_progress',
+            'dueDiligence.startedAt': new Date(),
+          },
+        },
+        { new: true }
+      )
+      .exec();
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return project;
+  }
+
+  async updateDueDiligence(
+    projectId: string,
+    officialId: string,
+    updateDto: UpdateDueDiligenceDto,
+  ): Promise<ProjectDocument> {
+    const project = await this.findOne(projectId);
+
+    // Check if this official is assigned to this project
+    if (project.dueDiligence.assignedTo?.toString() !== officialId) {
+      throw new BadRequestException('You are not assigned to this project');
+    }
+
+    const updateData: any = {};
+    
+    if (updateDto.notes) {
+      updateData['dueDiligence.notes'] = updateDto.notes;
+    }
+    
+    if (updateDto.status) {
+      updateData['dueDiligence.status'] = updateDto.status;
+      if (updateDto.status === 'completed') {
+        updateData['dueDiligence.completedAt'] = new Date();
+      }
+    }
+    
+    if (updateDto.documents) {
+      updateData['dueDiligence.documents'] = [
+        ...project.dueDiligence.documents,
+        ...updateDto.documents.map(doc => ({
+          ...doc,
+          uploadedAt: new Date(),
+        })),
+      ];
+    }
+
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(projectId, { $set: updateData }, { new: true })
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .populate('dueDiligence.assignedTo', 'firstName lastName email')
+      .exec();
+
+    if (!updatedProject) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return updatedProject;
+  }
+
+  async verifyProject(projectId: string, officialId: string, notes?: string): Promise<ProjectDocument> {
+    const project = await this.findOne(projectId);
+
+    if (project.status !== 'under_review') {
+      throw new BadRequestException('Project must be under review to verify');
+    }
+
+    // Create document hash
+    const documentHash = this.createDocumentHash({
+      projectId: project.projectId,
+      documents: project.documents,
+      dueDiligenceNotes: project.dueDiligence.notes,
+      verifiedAt: new Date(),
+    });
+
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(
+        projectId,
+        {
+          $set: {
+            status: 'active',
+            'verification.verifiedBy': officialId,
+            'verification.verifiedAt': new Date(),
+            'verification.documentHash': documentHash,
+          },
+        },
+        { new: true }
+      )
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .exec();
+
+    if (!updatedProject) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return updatedProject;
+  }
+
+  async rejectProject(projectId: string, officialId: string, reason: string): Promise<ProjectDocument> {
+    const project = await this.findOne(projectId);
+
+    if (!['submitted', 'under_review'].includes(project.status)) {
+      throw new BadRequestException('Can only reject submitted or under review projects');
+    }
+
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(
+        projectId,
+        {
+          $set: {
+            status: 'rejected',
+            'verification.verifiedBy': officialId,
+            'verification.verifiedAt': new Date(),
+            'verification.rejectionReason': reason,
+          },
+        },
+        { new: true }
+      )
+      .exec();
+
+    if (!updatedProject) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return updatedProject;
+  }
+
+  private createDocumentHash(data: any): string {
+    return createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  }
+
   // ==================== CONTRIBUTOR METHODS ====================
 
   async findVerifiedProjects(category?: string, location?: string): Promise<ProjectDocument[]> {
@@ -126,14 +294,67 @@ export class ProjectsService {
       .exec();
   }
 
-  // ==================== GOVERNMENT METHODS ====================
+  async addToFavorites(userId: string, projectId: string): Promise<{ message: string }> {
+    // Check if project exists
+    const project = await this.projectModel.findById(projectId);
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
 
-  async findPendingProjects(): Promise<ProjectDocument[]> {
-    return this.projectModel
-      .find({ status: 'submitted' })
-      .populate('farmer', 'firstName lastName email phoneNumber location')
-      .sort({ createdAt: 1 })
+    // Check if already favorited
+    const existingFavorite = await this.favoriteModel.findOne({
+      user: userId,
+      project: projectId,
+    });
+
+    if (existingFavorite) {
+      throw new BadRequestException('Project already in favorites');
+    }
+
+    // Add to favorites
+    await this.favoriteModel.create({
+      user: userId,
+      project: projectId,
+    });
+
+    return { message: 'Project added to favorites' };
+  }
+
+  async removeFromFavorites(userId: string, projectId: string): Promise<{ message: string }> {
+    const result = await this.favoriteModel.findOneAndDelete({
+      user: userId,
+      project: projectId,
+    });
+
+    if (!result) {
+      throw new NotFoundException('Favorite not found');
+    }
+
+    return { message: 'Project removed from favorites' };
+  }
+
+  async getFavorites(userId: string): Promise<ProjectDocument[]> {
+    const favorites = await this.favoriteModel
+      .find({ user: userId })
+      .populate({
+        path: 'project',
+        populate: {
+          path: 'farmer',
+          select: 'firstName lastName location profileImage',
+        },
+      })
+      .sort({ createdAt: -1 })
       .exec();
+
+    return favorites.map((fav: any) => fav.project).filter(Boolean);
+  }
+
+  async isFavorite(userId: string, projectId: string): Promise<boolean> {
+    const favorite = await this.favoriteModel.findOne({
+      user: userId,
+      project: projectId,
+    });
+    return !!favorite;
   }
 
   // ==================== STATS METHODS ====================

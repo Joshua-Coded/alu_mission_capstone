@@ -81,7 +81,5 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Create indexes - REMOVE the duplicate walletAddress index
-UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ emailVerificationToken: 1 });
-// Don't add walletAddress index here since it's already defined in @Prop

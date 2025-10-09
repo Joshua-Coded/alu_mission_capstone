@@ -20,7 +20,7 @@ async function bootstrap() {
     },
   }));
 
-  // CORS configuration - Fixed to handle undefined values
+  // CORS configuration
   const frontendUrl = configService.get<string>('FRONTEND_URL');
   const renderUrl = configService.get<string>('RENDER_EXTERNAL_URL');
   const isProduction = configService.get<string>('NODE_ENV') === 'production';
@@ -32,12 +32,10 @@ async function bootstrap() {
     'https://localhost:3000',
   ];
 
-  // Add frontend URL if it exists
   if (frontendUrl) {
     allowedOrigins.push(frontendUrl);
   }
 
-  // Add render URL if in production and it exists
   if (isProduction && renderUrl) {
     allowedOrigins.push(renderUrl);
   }
@@ -49,18 +47,69 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Swagger API documentation
+  // Enhanced Swagger API documentation
   const config = new DocumentBuilder()
-    .setTitle(configService.get<string>('API_TITLE') || 'RootRise API')
-    .setDescription(configService.get<string>('API_DESCRIPTION') || 'RootRise Authentication API')
-    .setVersion(configService.get<string>('API_VERSION') || '1.0')
-    .addBearerAuth()
-    .addServer('/', 'Production Server')
+    .setTitle('RootRise API')
+    .setDescription(`
+## RootRise Blockchain Farmer Funding Platform API
+
+### Overview
+RootRise connects farmers with contributors through a transparent blockchain-powered funding platform.
+
+### User Roles
+- **Farmers**: Create and manage agricultural projects
+- **Government Officials**: Review, verify, and approve projects
+- **Contributors**: Browse and fund verified projects
+
+### Authentication
+All protected endpoints require a valid JWT token:
+\`\`\`
+Authorization: Bearer <your-jwt-token>
+\`\`\`
+
+### Base URLs
+- Development: http://localhost:3001/api/v1
+- Production: Your production URL
+
+### Features
+- 🔐 Secure authentication with email verification
+- 🔑 Password reset functionality
+- 🌾 Project creation and management
+- 🏛️ Government due diligence workflow
+- 💰 Contributor funding and favorites
+- 📤 Cloudinary file uploads
+- 📊 Platform statistics
+    `)
+    .setVersion('1.0.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Enter your JWT token',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .addTag('auth', 'Authentication - Register, Login, Email Verification, Password Reset')
+    .addTag('projects', 'Projects - Create, Review, Verify, Fund')
+    .addTag('upload', 'File Upload - Images & Documents')
     .addServer('http://localhost:3001', 'Local Development')
+    .addServer('/', 'Production Server')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('api', app, document, {
+    customSiteTitle: 'RootRise API Docs',
+    customfavIcon: 'https://nestjs.com/img/logo-small.svg',
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'none',
+      filter: true,
+      showRequestDuration: true,
+    },
+  });
 
   // Health check endpoint
   app.getHttpAdapter().get('/health', (req, res) => {

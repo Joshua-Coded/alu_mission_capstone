@@ -3,12 +3,12 @@ import * as crypto from "crypto";
 import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { hash } from "bcryptjs";
+import { createHash, randomBytes } from "crypto";
 import { EmailService } from "../email/email.service";
 import { UsersService } from "../users/users.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
-
-// src/auth/auth.service.ts - WITH EMAIL SERVICE
 
 @Injectable()
 export class AuthService {
@@ -46,7 +46,7 @@ export class AuthService {
     const emailVerificationTokenExpires = new Date();
     emailVerificationTokenExpires.setHours(emailVerificationTokenExpires.getHours() + 24);
   
-    // Create user data object - only include fields that have values
+    // Create user data object
     const userData: any = {
       email: registerDto.email.toLowerCase(),
       password: hashedPassword,
@@ -86,7 +86,6 @@ export class AuthService {
       this.logger.log(`Verification email sent to: ${user.email}`);
     } catch (error: any) {
       this.logger.error(`Failed to send verification email: ${error.message}`);
-      // Continue registration even if email fails
     }
   
     return {
@@ -120,7 +119,6 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    // Allow login even if email not verified
     if (!user.emailVerified) {
       this.logger.warn(`User ${user.email} logged in with unverified email`);
     }
@@ -222,5 +220,53 @@ export class AuthService {
     return {
       message: 'Verification email sent successfully! Please check your inbox.',
     };
+  }
+
+  // ==================== PASSWORD RESET METHODS ====================
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(email);
+    
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return { message: 'If the email exists, a password reset link has been sent' };
+    }
+
+    // Generate reset token
+    const resetToken = randomBytes(32).toString('hex');
+    const hashedToken = createHash('sha256').update(resetToken).digest('hex');
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+    const userId = (user._id as any).toString();
+
+    await this.usersService.updatePasswordResetToken(userId, hashedToken, expires);
+
+    // Send password reset email
+    await this.emailService.sendPasswordResetEmail(
+      user.email,
+      user.firstName,
+      resetToken
+    );
+
+    return { message: 'If the email exists, a password reset link has been sent' };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    // Hash the token to match the stored hashed token
+    const hashedToken = createHash('sha256').update(token).digest('hex');
+    
+    const user = await this.usersService.findByPasswordResetToken(hashedToken);
+    
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Hash the new password
+    const hashedPassword = await hash(newPassword, 10);
+    const userId = (user._id as any).toString();
+
+    // Update password and clear reset token
+    await this.usersService.updatePassword(userId, hashedPassword);
+
+    return { message: 'Password reset successful' };
   }
 }

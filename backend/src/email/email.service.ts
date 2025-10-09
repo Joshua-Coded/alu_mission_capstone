@@ -2,8 +2,6 @@ import * as nodemailer from "nodemailer";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-// src/email/email.service.ts
-
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -60,6 +58,30 @@ export class EmailService {
     } catch (error) {
       this.logger.error(`Failed to send welcome email to ${email}:`, error);
       throw error;
+    }
+  }
+
+  async sendPasswordResetEmail(
+    email: string,
+    firstName: string,
+    resetToken: string,
+  ): Promise<void> {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    const mailOptions = {
+      from: this.configService.get<string>('EMAIL_FROM'),
+      to: email,
+      subject: '🔐 Password Reset Request - RootRise',
+      html: this.getPasswordResetEmailTemplate(firstName, resetUrl),
+    };
+
+    try {
+      const result = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`Password reset email sent to ${email}: ${result.messageId}`);
+    } catch (error) {
+      this.logger.error(`Failed to send password reset email to ${email}:`, error);
+      throw new Error('Failed to send password reset email');
     }
   }
 
@@ -127,9 +149,6 @@ export class EmailService {
         <div class="footer">
           <p>RootRise - Blockchain Agricultural Crowdfunding Platform for Rwanda</p>
           <p>Building bridges between farmers, investors, and sustainable agriculture</p>
-          <br>
-          <a href="https://rootrise.rw" style="color: #4CAF50; text-decoration: none;">RootRise Platform</a> | 
-          Blockchain Agricultural Crowdfunding for Rwanda
         </div>
       </div>
     </body>
@@ -223,10 +242,82 @@ export class EmailService {
           <p>RootRise - Blockchain Agricultural Crowdfunding Platform</p>
           <p>Connecting farmers, investors, and sustainable development in Rwanda</p>
           <p>🌍 Building a more prosperous agricultural future, one project at a time</p>
-          <br>
-          <a href="https://rootrise.rw" style="color: #4CAF50; text-decoration: none;">Visit Website</a> | 
-          <a href="https://app.rootrise.rw" style="color: #4CAF50; text-decoration: none;">Login</a> | 
-          <a href="https://support.rootrise.rw" style="color: #4CAF50; text-decoration: none;">Support</a>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+  }
+
+  private getPasswordResetEmailTemplate(firstName: string, resetUrl: string): string {
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: #f5f5f5; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #2E7D32, #4CAF50); padding: 30px; text-align: center; }
+        .logo { color: #ffffff; font-size: 28px; font-weight: 700; margin: 0; }
+        .tagline { color: rgba(255,255,255,0.9); font-size: 14px; margin: 8px 0 0; }
+        .content { padding: 30px; }
+        .btn { display: inline-block; background: #4CAF50; color: #ffffff !important; text-decoration: none; padding: 15px 30px; border-radius: 6px; font-weight: 600; margin: 20px 0; }
+        .btn:hover { background: #45a049; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; font-size: 14px; }
+        .warning { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
+        .link { color: #4CAF50; word-break: break-all; font-size: 13px; }
+        h1 { color: #2E7D32; margin: 0 0 20px; font-size: 28px; }
+        h2 { color: #2E7D32; margin: 20px 0 10px; }
+        p { margin: 12px 0; }
+        ul { margin: 10px 0; padding-left: 20px; }
+        li { margin: 8px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌱 RootRise</div>
+          <div class="tagline">Empowering Rwanda's Agricultural Future</div>
+          <h1 style="color: white; margin: 15px 0 0;">🔐 Password Reset Request</h1>
+        </div>
+        
+        <div class="content">
+          <h2>Hello ${firstName},</h2>
+          
+          <p>We received a request to reset your password for your RootRise account.</p>
+          
+          <p>Click the button below to reset your password:</p>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${resetUrl}" class="btn">Reset Password</a>
+          </div>
+          
+          <p>Or copy and paste this link into your browser:</p>
+          <p class="link">${resetUrl}</p>
+          
+          <div class="warning">
+            <strong>⚠️ Security Notice:</strong>
+            <ul>
+              <li>This link will expire in 1 hour</li>
+              <li>If you didn't request this, please ignore this email</li>
+              <li>Your password won't change until you create a new one</li>
+              <li>Never share this link with anyone</li>
+            </ul>
+          </div>
+          
+          <p style="margin-top: 30px; color: #666; font-size: 14px;">
+            If you're having trouble clicking the button, copy and paste the URL into your web browser.
+          </p>
+          
+          <p>Murakoze,<br><strong>The RootRise Team</strong></p>
+        </div>
+        
+        <div class="footer">
+          <p>RootRise - Blockchain Agricultural Crowdfunding Platform</p>
+          <p>This is an automated email, please do not reply.</p>
+          <p>🛡️ Your security is our priority</p>
         </div>
       </div>
     </body>

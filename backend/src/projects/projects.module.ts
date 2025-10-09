@@ -3,6 +3,7 @@ import { MongooseModule } from "@nestjs/mongoose";
 import { ProjectsController } from "./projects.controller";
 import { ProjectsService } from "./projects.service";
 import { Contribution, ContributionSchema } from "./schemas/contribution.schema";
+import { Favorite, FavoriteSchema } from "./schemas/favorite.schema";
 import { Project, ProjectSchema } from "./schemas/project.schema";
 
 @Module({
@@ -10,6 +11,7 @@ import { Project, ProjectSchema } from "./schemas/project.schema";
     MongooseModule.forFeature([
       { name: Project.name, schema: ProjectSchema },
       { name: Contribution.name, schema: ContributionSchema },
+      { name: Favorite.name, schema: FavoriteSchema },
     ]),
   ],
   controllers: [ProjectsController],
