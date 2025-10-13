@@ -1,12 +1,15 @@
 import CreateProjectModal from "./CreateProjectModal";
 import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FiFilter, FiPlus } from "react-icons/fi";
 import { FiChevronDown } from "react-icons/fi";
+import { Project as ApiProject, ProjectStatus, projectApi } from "../../../lib/projectApi";
 import { EditProjectModal } from "./EditProjectModal";
 import { ShareProjectModal } from "./ShareProjectModal";
+
+// components/dashboard/farmer/FarmerProjectsSection.tsx
 
 import {
   Card,
@@ -28,9 +31,12 @@ import {
   Box,
   Icon,
   VStack,
+  Spinner,
+  useToast,
 } from '@chakra-ui/react';
 
-interface Project {
+// Map backend Project to frontend Project interface
+interface FrontendProject {
   id: string;
   name: string;
   progress: number;
@@ -51,114 +57,14 @@ const FarmerProjectsSection: React.FC = () => {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const searchParams = useSearchParams();
+  const toast = useToast();
   
-  // Get filter from URL params
   const filterParam = searchParams.get('filter');
   const actionParam = searchParams.get('action');
   
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: '1',
-      name: 'Organic Tomatoes 2024',
-      progress: 85,
-      funding: '$8,500',
-      fundingGoal: '$10,000',
-      investors: 12,
-      phase: 'Growing',
-      roi: '22%',
-      status: 'active',
-      description: 'Premium organic tomatoes using sustainable farming practices',
-      expectedHarvest: 'December 2024',
-      location: 'Kigali Province',
-      images: [
-        'https://images.unsplash.com/photo-1592841200221-a6898f307baa?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1603833797131-3c0a798d2f8e?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?w=400&h=300&fit=crop'
-      ],
-      videos: [
-        'https://www.w3schools.com/html/mov_bbb.mp4'
-      ]
-    },
-    {
-      id: '2',
-      name: 'Sustainable Corn',
-      progress: 61,
-      funding: '$15,200',
-      fundingGoal: '$25,000',
-      investors: 18,
-      phase: 'Planting',
-      roi: '18%',
-      status: 'active',
-      description: 'High-yield corn varieties with climate-resistant properties',
-      expectedHarvest: 'January 2025',
-      location: 'Eastern Province',
-      images: [
-        'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1574943320219-553eb213f72d?w=400&h=300&fit=crop'
-      ],
-      videos: []
-    },
-    {
-      id: '3',
-      name: 'Vertical Lettuce Farm',
-      progress: 100,
-      funding: '$6,000',
-      fundingGoal: '$6,000',
-      investors: 8,
-      phase: 'Completed',
-      roi: '25%',
-      status: 'completed',
-      description: 'Indoor vertical farming system for year-round lettuce production',
-      expectedHarvest: 'Completed',
-      location: 'Kigali City',
-      images: [
-        'https://images.unsplash.com/photo-1622383563227-04401ab4e5ea?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1565011523534-747a8601f10a?w=400&h=300&fit=crop'
-      ],
-      videos: [
-        'https://www.w3schools.com/html/movie.mp4'
-      ]
-    },
-    {
-      id: '4',
-      name: 'Heritage Potatoes',
-      progress: 35,
-      funding: '$3,500',
-      fundingGoal: '$10,000',
-      investors: 5,
-      phase: 'Planning',
-      roi: '20%',
-      status: 'funding',
-      description: 'Traditional potato varieties with improved resistance',
-      expectedHarvest: 'March 2025',
-      location: 'Northern Province',
-      images: [
-        'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400&h=300&fit=crop',
-        'https://images.unsplash.com/photo-1587049352846-4a222e784acc?w=400&h=300&fit=crop'
-      ],
-      videos: []
-    },
-    {
-      id: '5',
-      name: 'Organic Coffee Beans',
-      progress: 0,
-      funding: '$0',
-      fundingGoal: '$20,000',
-      investors: 0,
-      phase: 'Planning',
-      roi: '30%',
-      status: 'pending_verification',
-      description: 'Premium coffee cultivation with organic certification',
-      expectedHarvest: 'June 2025',
-      location: 'Western Province',
-      images: [
-        'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=400&h=300&fit=crop'
-      ],
-      videos: []
-    },
-  ]);
+  const [selectedProject, setSelectedProject] = useState<FrontendProject | null>(null);
+  const [projects, setProjects] = useState<FrontendProject[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Modal controls
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
@@ -166,19 +72,74 @@ const FarmerProjectsSection: React.FC = () => {
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
 
+  // Convert backend project to frontend format
+  const mapApiProjectToFrontend = (apiProject: ApiProject): FrontendProject => {
+    return {
+      id: apiProject._id,
+      name: apiProject.title,
+      progress: (apiProject.currentFunding / apiProject.fundingGoal) * 100,
+      funding: `$${apiProject.currentFunding.toLocaleString()}`,
+      fundingGoal: `$${apiProject.fundingGoal.toLocaleString()}`,
+      investors: apiProject.contributorsCount,
+      phase: apiProject.status === 'active' ? 'Active' : 
+             apiProject.status === 'draft' ? 'Planning' :
+             apiProject.status === 'submitted' ? 'Under Review' :
+             apiProject.status === 'rejected' ? 'Rejected' : 'Planning',
+      roi: '0%', // Calculate based on your business logic
+      status: apiProject.status,
+      description: apiProject.description,
+      expectedHarvest: apiProject.timeline || 'Not specified',
+      location: apiProject.location,
+      images: apiProject.images || [],
+      videos: [], // Add if you have video support
+    };
+  };
+
+  // Fetch projects from backend
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      
+      // Map status filter to backend status
+      let statusFilter: ProjectStatus | undefined;
+      if (filterParam === 'active') statusFilter = ProjectStatus.ACTIVE;
+      if (filterParam === 'completed') statusFilter = ProjectStatus.FUNDED;
+      if (filterParam === 'funding') statusFilter = ProjectStatus.ACTIVE;
+      if (filterParam === 'pending') statusFilter = ProjectStatus.SUBMITTED;
+
+      const apiProjects = await projectApi.getMyProjects(statusFilter);
+      const mappedProjects = apiProjects.map(mapApiProjectToFrontend);
+      setProjects(mappedProjects);
+    } catch (error: any) {
+      toast({
+        title: 'Error loading projects',
+        description: error.message || 'Failed to load projects',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load projects on mount and when filter changes
+  useEffect(() => {
+    loadProjects();
+  }, [filterParam]);
+
   // Filter projects based on URL parameter
   const filteredProjects = useMemo(() => {
-    if (!filterParam) return projects; // Show all if no filter
+    if (!filterParam) return projects;
     
     switch (filterParam) {
       case 'active':
         return projects.filter(p => p.status === 'active');
       case 'completed':
-        return projects.filter(p => p.status === 'completed');
+        return projects.filter(p => p.status === 'funded' || p.status === 'closed');
       case 'funding':
-        return projects.filter(p => p.status === 'funding');
+        return projects.filter(p => p.status === 'active');
       case 'pending':
-        return projects.filter(p => p.status === 'pending_verification');
+        return projects.filter(p => p.status === 'submitted' || p.status === 'under_review');
       default:
         return projects;
     }
@@ -189,9 +150,9 @@ const FarmerProjectsSection: React.FC = () => {
     return {
       all: projects.length,
       active: projects.filter(p => p.status === 'active').length,
-      completed: projects.filter(p => p.status === 'completed').length,
-      funding: projects.filter(p => p.status === 'funding').length,
-      pending: projects.filter(p => p.status === 'pending_verification').length,
+      completed: projects.filter(p => p.status === 'funded' || p.status === 'closed').length,
+      funding: projects.filter(p => p.status === 'active').length,
+      pending: projects.filter(p => p.status === 'submitted' || p.status === 'under_review').length,
     };
   }, [projects]);
 
@@ -202,23 +163,28 @@ const FarmerProjectsSection: React.FC = () => {
     }
   }, [actionParam, onCreateOpen]);
 
-  const handleViewDetails = (project: Project) => {
+  const handleViewDetails = (project: FrontendProject) => {
     setSelectedProject(project);
     onDetailsOpen();
   };
 
-  const handleEditProject = (project: Project) => {
+  const handleEditProject = (project: FrontendProject) => {
     setSelectedProject(project);
     onEditOpen();
   };
 
-  const handleShareProject = (project: Project) => {
+  const handleShareProject = (project: FrontendProject) => {
     setSelectedProject(project);
     onShareOpen();
   };
 
-  const handleSaveProject = (updatedProject: Project) => {
+  const handleSaveProject = (updatedProject: FrontendProject) => {
     setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
+  const handleProjectCreated = () => {
+    // Reload projects after creating a new one
+    loadProjects();
   };
 
   const getFilterLabel = () => {
@@ -241,12 +207,30 @@ const FarmerProjectsSection: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active': return 'green';
-      case 'completed': return 'purple';
+      case 'completed':
+      case 'funded': return 'purple';
       case 'funding': return 'blue';
-      case 'pending': return 'yellow';
+      case 'pending':
+      case 'submitted':
+      case 'under_review': return 'yellow';
       default: return 'gray';
     }
   };
+
+  if (loading) {
+    return (
+      <Card bg={cardBg} border="1px" borderColor={borderColor}>
+        <CardBody>
+          <Flex justify="center" align="center" minH="400px">
+            <VStack spacing={4}>
+              <Spinner size="xl" color="brand.500" thickness="4px" />
+              <Text color="gray.600">Loading your projects...</Text>
+            </VStack>
+          </Flex>
+        </CardBody>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -396,7 +380,11 @@ const FarmerProjectsSection: React.FC = () => {
       </Card>
 
       {/* All Modals */}
-      <CreateProjectModal isOpen={isCreateOpen} onClose={onCreateClose} />
+      <CreateProjectModal 
+        isOpen={isCreateOpen} 
+        onClose={onCreateClose}
+        onProjectCreated={handleProjectCreated}
+      />
       
       <ProjectDetailsModal 
         isOpen={isDetailsOpen} 

@@ -25,15 +25,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Load user from localStorage on app start
   useEffect(() => {
-    const savedToken = localStorage.getItem('auth_token');
+    const savedToken = localStorage.getItem('authToken');
     const savedUser = localStorage.getItem('auth_user');
-    
+        
     if (savedToken && savedUser) {
       try {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
       } catch (error) {
-        localStorage.removeItem('auth_token');
+        console.error('Error loading auth data:', error);
+        localStorage.removeItem('authToken');
         localStorage.removeItem('auth_user');
       }
     }
@@ -43,13 +44,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (data: LoginData) => {
     try {
       const response = await api.login(data);
-      
+        
       setToken(response.access_token);
       setUser(response.user);
-      
-      localStorage.setItem('auth_token', response.access_token);
+        
+      localStorage.setItem('authToken', response.access_token);
       localStorage.setItem('auth_user', JSON.stringify(response.user));
+      
+      console.log('✅ Login successful, token stored');
     } catch (error) {
+      console.error('Login error:', error);
       throw error;
     }
   };
@@ -57,13 +61,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (data: RegisterData) => {
     try {
       const response = await api.register(data);
-      
+        
       setToken(response.access_token);
       setUser(response.user);
-      
-      localStorage.setItem('auth_token', response.access_token);
+        
+      localStorage.setItem('authToken', response.access_token);
       localStorage.setItem('auth_user', JSON.stringify(response.user));
+      
+      console.log('✅ Registration successful, token stored');
     } catch (error) {
+      console.error('Registration error:', error);
       throw error;
     }
   };
@@ -71,20 +78,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('auth_token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('auth_user');
+    console.log('✅ Logged out');
   };
 
   const verifyEmail = async (verificationToken: string) => {
     try {
       await api.verifyEmail(verificationToken);
-      
       if (user) {
         const updatedUser = { ...user, emailVerified: true };
         setUser(updatedUser);
         localStorage.setItem('auth_user', JSON.stringify(updatedUser));
       }
     } catch (error) {
+      console.error('Email verification error:', error);
       throw error;
     }
   };

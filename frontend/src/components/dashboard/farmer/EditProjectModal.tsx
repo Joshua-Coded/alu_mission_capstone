@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { FiSave } from "react-icons/fi";
+import { FiSave, FiUpload, FiX } from "react-icons/fi";
+import { UpdateProjectDto, projectApi } from "../../../lib/projectApi";
 
-// EditProjectModal.tsx
+// components/dashboard/farmer/EditProjectModal.tsx
+
 import {
   Modal,
   ModalOverlay,
@@ -19,6 +21,16 @@ import {
   Button,
   SimpleGrid,
   useToast,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  Box,
+  Image,
+  IconButton,
+  Text,
+  Badge,
+  Spinner,
 } from '@chakra-ui/react';
 
 interface Project {
@@ -50,141 +62,462 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   project,
   onSave
 }) => {
-  const [editedProject, setEditedProject] = useState<Project | null>(null);
+  const [formData, setFormData] = useState<UpdateProjectDto>({
+    title: '',
+    description: '',
+    category: '',
+    fundingGoal: 0,
+    timeline: '',
+    location: '',
+  });
+  
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fullProjectData, setFullProjectData] = useState<any>(null);
+  
   const toast = useToast();
 
+  const categories = [
+    'Crops',
+    'Livestock',
+    'Equipment',
+    'Infrastructure',
+    'Processing',
+    'Storage',
+    'Irrigation',
+    'Seeds & Fertilizer',
+  ];
+
+  const locations = [
+    'Kigali Province',
+    'Eastern Province', 
+    'Northern Province',
+    'Southern Province',
+    'Western Province',
+  ];
+
+  // Fetch full project data when project changes
   useEffect(() => {
-    if (project) {
-      setEditedProject({ ...project });
+    const fetchProjectDetails = async () => {
+      if (project?.id && isOpen) {
+        setIsLoading(true);
+        try {
+          const fullProject = await projectApi.getProjectById(project.id);
+          setFullProjectData(fullProject);
+          
+          // Set form data from full project
+          setFormData({
+            title: fullProject.title || '',
+            description: fullProject.description || '',
+            category: fullProject.category || '',
+            fundingGoal: fullProject.fundingGoal || 0,
+            timeline: fullProject.timeline || '',
+            location: fullProject.location || '',
+          });
+
+          // Set existing images
+          setExistingImages(fullProject.images || []);
+        } catch (error) {
+          console.error('Failed to load project details:', error);
+          toast({
+            title: 'Error',
+            description: 'Failed to load project details',
+            status: 'error',
+            duration: 3000,
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchProjectDetails();
+  }, [project?.id, isOpen]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setNewImages([]);
+      setNewImagePreviews([]);
+      setExistingImages([]);
+      setFullProjectData(null);
     }
-  }, [project]);
+  }, [isOpen]);
 
-  if (!editedProject) return null;
+  if (!project) return null;
 
-  const handleSave = () => {
-    onSave(editedProject);
-    toast({
-      title: "Project Updated",
-      description: "Your project has been successfully updated.",
-      status: "success",
-      duration: 3000,
-      isClosable: true,
+  // Check if project can be edited
+  const canEdit = project.status === 'draft' || project.status === 'submitted';
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const validFiles: File[] = [];
+    const newPreviews: string[] = [];
+
+    Array.from(files).forEach(file => {
+      if (file.size > maxSize) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is larger than 5MB`,
+          status: "error",
+          duration: 3000,
+        });
+        return;
+      }
+
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: `${file.name} is not an image`,
+          status: "error",
+          duration: 3000,
+        });
+        return;
+      }
+
+      validFiles.push(file);
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          newPreviews.push(e.target.result as string);
+          if (newPreviews.length === validFiles.length) {
+            setNewImagePreviews(prev => [...prev, ...newPreviews]);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
     });
-    onClose();
+
+    setNewImages(prev => [...prev, ...validFiles]);
   };
 
-  const handleInputChange = (field: keyof Project, value: string | number) => {
-    setEditedProject(prev => prev ? { ...prev, [field]: value } : null);
+  const removeNewImage = (index: number) => {
+    setNewImages(prev => prev.filter((_, i) => i !== index));
+    setNewImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingImage = (index: number) => {
+    setExistingImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleInputChange = (field: keyof UpdateProjectDto, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!canEdit) {
+      toast({
+        title: 'Cannot Edit',
+        description: 'This project cannot be edited after it has been reviewed',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsUploading(newImages.length > 0);
+
+    try {
+      let allImages = [...existingImages];
+
+      // Upload new images if any
+      if (newImages.length > 0) {
+        const imageUploadResult = await projectApi.uploadMultipleImages(newImages);
+        allImages = [...allImages, ...imageUploadResult.urls];
+      }
+
+      // Prepare update data
+      const updateData: UpdateProjectDto = {
+        ...formData,
+        images: allImages.length > 0 ? allImages : undefined,
+      };
+
+      // Update project via API
+      const updatedProject = await projectApi.updateProject(project.id, updateData);
+      
+      toast({
+        title: "Project Updated",
+        description: "Your project has been successfully updated.",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      // Update local project data
+      const updatedLocalProject: Project = {
+        ...project,
+        name: updatedProject.title,
+        description: updatedProject.description,
+        fundingGoal: `$${updatedProject.fundingGoal.toLocaleString()}`,
+        expectedHarvest: updatedProject.timeline,
+        location: updatedProject.location,
+        images: updatedProject.images,
+      };
+
+      onSave(updatedLocalProject);
+      onClose();
+    } catch (error: any) {
+      console.error('Update error:', error);
+      toast({
+        title: "Update Failed",
+        description: error.message || "There was an error updating your project.",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsSubmitting(false);
+      setIsUploading(false);
+    }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="4xl">
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent>
-        <ModalHeader>Edit Project</ModalHeader>
+        <ModalHeader>
+          <VStack align="start" spacing={2}>
+            <HStack>
+              <Text>Edit Project</Text>
+              <Badge colorScheme={canEdit ? 'green' : 'red'}>
+                {canEdit ? 'Editable' : 'Read Only'}
+              </Badge>
+            </HStack>
+            <Text fontSize="sm" color="gray.600" fontWeight="normal">
+              {project.name}
+            </Text>
+          </VStack>
+        </ModalHeader>
         <ModalCloseButton />
+        
         <ModalBody pb={6}>
-          <VStack spacing={6} align="stretch">
-            <FormControl>
-              <FormLabel>Project Name</FormLabel>
+          {isLoading ? (
+            <VStack spacing={4} py={8}>
+              <Spinner size="xl" color="brand.500" thickness="4px" />
+              <Text color="gray.600">Loading project details...</Text>
+            </VStack>
+          ) : !canEdit ? (
+            <Alert status="warning" borderRadius="md" mb={4}>
+              <AlertIcon />
+              <Box>
+                <AlertTitle>Project Cannot Be Edited</AlertTitle>
+                <AlertDescription>
+                  Projects can only be edited when they are in draft or submitted status.
+                  This project is currently {project.status}.
+                </AlertDescription>
+              </Box>
+            </Alert>
+          ) : null}
+
+          <VStack spacing={6} align="stretch" opacity={!canEdit || isLoading ? 0.6 : 1}>
+            <FormControl isRequired isDisabled={!canEdit}>
+              <FormLabel>Project Title</FormLabel>
               <Input
-                value={editedProject.name}
-                onChange={(e) => handleInputChange('name', e.target.value)}
+                value={formData.title}
+                onChange={(e) => handleInputChange('title', e.target.value)}
                 placeholder="Enter project name"
               />
             </FormControl>
 
-            <FormControl>
+            <FormControl isRequired isDisabled={!canEdit}>
               <FormLabel>Description</FormLabel>
               <Textarea
-                value={editedProject.description}
+                value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
-                rows={3}
+                rows={4}
                 placeholder="Describe your project"
               />
             </FormControl>
 
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-              <FormControl>
+              <FormControl isRequired isDisabled={!canEdit}>
+                <FormLabel>Category</FormLabel>
+                <Select
+                  value={formData.category}
+                  onChange={(e) => handleInputChange('category', e.target.value)}
+                  placeholder="Select category"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl isRequired isDisabled={!canEdit}>
                 <FormLabel>Location</FormLabel>
                 <Select
-                  value={editedProject.location}
+                  value={formData.location}
                   onChange={(e) => handleInputChange('location', e.target.value)}
+                  placeholder="Select location"
                 >
-                  <option value="">Select location</option>
-                  <option value="Kigali Province">Kigali Province</option>
-                  <option value="Eastern Province">Eastern Province</option>
-                  <option value="Northern Province">Northern Province</option>
-                  <option value="Southern Province">Southern Province</option>
-                  <option value="Western Province">Western Province</option>
-                </Select>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Phase</FormLabel>
-                <Select
-                  value={editedProject.phase}
-                  onChange={(e) => handleInputChange('phase', e.target.value)}
-                >
-                  <option value="Planning">Planning</option>
-                  <option value="Planting">Planting</option>
-                  <option value="Growing">Growing</option>
-                  <option value="Harvest">Harvest</option>
-                  <option value="Completed">Completed</option>
+                  {locations.map(loc => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
                 </Select>
               </FormControl>
             </SimpleGrid>
 
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-              <FormControl>
-                <FormLabel>Expected Harvest</FormLabel>
+              <FormControl isRequired isDisabled={!canEdit}>
+                <FormLabel>Funding Goal ($)</FormLabel>
                 <Input
-                  value={editedProject.expectedHarvest}
-                  onChange={(e) => handleInputChange('expectedHarvest', e.target.value)}
-                  placeholder="e.g., December 2024"
+                  type="number"
+                  min={1000}
+                  value={formData.fundingGoal}
+                  onChange={(e) => handleInputChange('fundingGoal', parseInt(e.target.value) || 0)}
+                  placeholder="10000"
                 />
               </FormControl>
 
-              <FormControl>
-                <FormLabel>Expected ROI</FormLabel>
+              <FormControl isRequired isDisabled={!canEdit}>
+                <FormLabel>Timeline / Expected Harvest</FormLabel>
                 <Input
-                  value={editedProject.roi}
-                  onChange={(e) => handleInputChange('roi', e.target.value)}
-                  placeholder="e.g., 25%"
-                />
-              </FormControl>
-            </SimpleGrid>
-
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-              <FormControl>
-                <FormLabel>Status</FormLabel>
-                <Select
-                  value={editedProject.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                >
-                  <option value="active">Active</option>
-                  <option value="funding">Funding</option>
-                  <option value="completing">Completing</option>
-                  <option value="completed">Completed</option>
-                  <option value="paused">Paused</option>
-                </Select>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>Funding Goal</FormLabel>
-                <Input
-                  value={editedProject.fundingGoal}
-                  onChange={(e) => handleInputChange('fundingGoal', e.target.value)}
-                  placeholder="e.g., $10,000"
+                  value={formData.timeline}
+                  onChange={(e) => handleInputChange('timeline', e.target.value)}
+                  placeholder="e.g., 6 months, December 2025"
                 />
               </FormControl>
             </SimpleGrid>
 
-            <HStack spacing={4} justify="flex-end">
+            {/* Image Management */}
+            <FormControl isDisabled={!canEdit}>
+              <FormLabel>Project Images</FormLabel>
+              <VStack spacing={4} align="stretch">
+                {/* Existing Images */}
+                {existingImages.length > 0 && (
+                  <Box>
+                    <Text fontSize="sm" color="gray.600" mb={2}>Current Images</Text>
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+                      {existingImages.map((image, index) => (
+                        <Box key={index} position="relative" borderRadius="md" overflow="hidden">
+                          <Image
+                            src={image}
+                            alt={`Current image ${index + 1}`}
+                            w="full"
+                            h="100px"
+                            objectFit="cover"
+                          />
+                          {canEdit && (
+                            <IconButton
+                              icon={<FiX />}
+                              size="sm"
+                              colorScheme="red"
+                              position="absolute"
+                              top={1}
+                              right={1}
+                              onClick={() => removeExistingImage(index)}
+                              aria-label="Remove image"
+                            />
+                          )}
+                        </Box>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
+
+                {/* New Images */}
+                {newImagePreviews.length > 0 && (
+                  <Box>
+                    <Text fontSize="sm" color="gray.600" mb={2}>New Images</Text>
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+                      {newImagePreviews.map((preview, index) => (
+                        <Box key={index} position="relative" borderRadius="md" overflow="hidden">
+                          <Image
+                            src={preview}
+                            alt={`New image ${index + 1}`}
+                            w="full"
+                            h="100px"
+                            objectFit="cover"
+                          />
+                          <Badge
+                            position="absolute"
+                            top={1}
+                            left={1}
+                            colorScheme="blue"
+                            fontSize="xs"
+                          >
+                            New
+                          </Badge>
+                          <IconButton
+                            icon={<FiX />}
+                            size="sm"
+                            colorScheme="red"
+                            position="absolute"
+                            top={1}
+                            right={1}
+                            onClick={() => removeNewImage(index)}
+                            aria-label="Remove image"
+                          />
+                        </Box>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
+
+                {/* Upload Button */}
+                {canEdit && (
+                  <Box
+                    border="2px"
+                    borderColor="gray.300"
+                    borderStyle="dashed"
+                    borderRadius="md"
+                    p={4}
+                    textAlign="center"
+                    cursor="pointer"
+                    _hover={{ borderColor: 'brand.400', bg: 'gray.50' }}
+                    onClick={() => document.getElementById('edit-image-upload')?.click()}
+                  >
+                    <VStack spacing={2}>
+                      <FiUpload size={20} />
+                      <Text fontSize="sm">Click to add more images</Text>
+                      <Text fontSize="xs" color="gray.500">
+                        PNG, JPG up to 5MB each
+                      </Text>
+                    </VStack>
+                    <input
+                      id="edit-image-upload"
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleImageUpload}
+                    />
+                  </Box>
+                )}
+              </VStack>
+            </FormControl>
+
+            {isUploading && (
+              <Alert status="info" borderRadius="md">
+                <AlertIcon />
+                <Text fontSize="sm">Uploading images...</Text>
+              </Alert>
+            )}
+
+            <HStack spacing={4} justify="flex-end" pt={4}>
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button colorScheme="brand" leftIcon={<FiSave />} onClick={handleSave}>
+              <Button 
+                colorScheme="brand" 
+                leftIcon={<FiSave />} 
+                onClick={handleSave}
+                isLoading={isSubmitting}
+                loadingText={isUploading ? "Uploading..." : "Saving..."}
+                isDisabled={!canEdit || isLoading}
+              >
                 Save Changes
               </Button>
             </HStack>
