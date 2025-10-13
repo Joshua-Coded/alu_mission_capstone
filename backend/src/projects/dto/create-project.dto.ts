@@ -1,5 +1,24 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+
+// dto/create-project.dto.ts
+
+export class ProjectDocumentDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  url: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  documentType: string;
+}
 
 export class CreateProjectDto {
   @ApiProperty({ 
@@ -7,6 +26,7 @@ export class CreateProjectDto {
     description: 'Project title'
   })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(200)
   title: string;
 
@@ -15,6 +35,7 @@ export class CreateProjectDto {
     description: 'Detailed project description'
   })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(2000)
   description: string;
 
@@ -28,10 +49,10 @@ export class CreateProjectDto {
 
   @ApiProperty({ 
     example: 'crops',
-    description: 'Project category',
-    enum: ['crops', 'livestock', 'equipment', 'irrigation', 'storage', 'other']
+    description: 'Project category'
   })
   @IsString()
+  @IsNotEmpty()
   category: string;
 
   @ApiProperty({ 
@@ -39,15 +60,16 @@ export class CreateProjectDto {
     description: 'Project location'
   })
   @IsString()
+  @IsNotEmpty()
   location: string;
 
-  @ApiPropertyOptional({ 
+  @ApiProperty({ 
     example: '6 months',
-    description: 'Project duration'
+    description: 'Project timeline'
   })
-  @IsOptional()
   @IsString()
-  duration?: string;
+  @IsNotEmpty()
+  timeline: string;
 
   @ApiPropertyOptional({ 
     type: [String],
@@ -59,19 +81,10 @@ export class CreateProjectDto {
   images?: string[];
 
   @ApiPropertyOptional({
-    type: [Object],
-    example: [{
-      name: 'Land Title Document',
-      url: 'https://example.com/land-title.pdf',
-      documentType: 'land_ownership'
-    }],
+    type: [ProjectDocumentDto],
     description: 'Supporting documents'
   })
   @IsOptional()
   @IsArray()
-  documents?: {
-    name: string;
-    url: string;
-    documentType: string;
-  }[];
+  documents?: ProjectDocumentDto[];
 }

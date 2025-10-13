@@ -42,13 +42,28 @@ import {
   
     // ==================== FARMER ENDPOINTS ====================
   
-    @Post()
-    @Roles(UserRole.FARMER)
-    @ApiOperation({ summary: 'Create a new project (Farmer only)' })
-    @ApiResponse({ status: 201, description: 'Project created successfully' })
-    async create(@Body() createProjectDto: CreateProjectDto, @Req() req: RequestWithUser) {
-      return this.projectsService.create(createProjectDto, req.user.userId);
-    }
+   // In projects.controller.ts - UPDATE the create method
+@Post()
+@Roles(UserRole.FARMER)
+@ApiOperation({ summary: 'Create a new project (Farmer only)' })
+@ApiResponse({ status: 201, description: 'Project created successfully' })
+async create(@Body() createProjectDto: CreateProjectDto, @Req() req: RequestWithUser) {
+  console.log('=== CONTROLLER DEBUG ===');
+  console.log('Request user object:', req.user);
+  console.log('User ID:', req.user?.userId);
+  console.log('User role:', req.user?.role);
+  
+  // ✅ Check if we have the required user data
+  if (!req.user || !req.user.userId) {
+    console.error('Missing user data in request:', req.user);
+    throw new HttpException(
+      'Authentication failed: missing user information', 
+      HttpStatus.UNAUTHORIZED
+    );
+  }
+  
+  return this.projectsService.create(createProjectDto, req.user.userId);
+}
   
     @Get('my-projects')
     @Roles(UserRole.FARMER)

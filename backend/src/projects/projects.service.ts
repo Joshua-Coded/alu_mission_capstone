@@ -3,11 +3,14 @@ import { InjectModel } from "@nestjs/mongoose";
 import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import { Model } from "mongoose";
+import { Types } from "mongoose";
 import { CreateProjectDto } from "./dto/create-project.dto";
 import { UpdateDueDiligenceDto } from "./dto/update-due-diligence.dto";
 import { UpdateProjectDto } from "./dto/update-project.dto";
 import { Favorite, FavoriteDocument } from "./schemas/favorite.schema";
 import { Project, ProjectDocument } from "./schemas/project.schema";
+
+// projects.service.ts
 
 @Injectable()
 export class ProjectsService {
@@ -18,24 +21,63 @@ export class ProjectsService {
 
   // ==================== FARMER METHODS ====================
 
-  async create(createProjectDto: CreateProjectDto, farmerId: string): Promise<ProjectDocument> {
-    const project = new this.projectModel({
+async create(createProjectDto: CreateProjectDto, farmerId: string): Promise<ProjectDocument> {
+  console.log('=== PROJECT CREATION START ===');
+  console.log('Farmer ID:', farmerId);
+  console.log('Farmer ID type:', typeof farmerId);
+  
+  try {
+    // ✅ Convert string farmerId to ObjectId
+    const farmerObjectId = new Types.ObjectId(farmerId);
+    
+    console.log('Converted farmer ObjectId:', farmerObjectId);
+    console.log('Is valid ObjectId?', Types.ObjectId.isValid(farmerId));
+
+    const projectData = {
       ...createProjectDto,
       projectId: randomUUID(),
-      farmer: farmerId,
-      status: 'draft',
+      farmer: farmerObjectId, // ✅ Use ObjectId instead of string
+      status: 'draft' as const,
       currentFunding: 0,
       contributorsCount: 0,
       dueDiligence: {
-        status: 'pending',
+        status: 'pending' as const,
         notes: '',
         documents: [],
       },
       verification: {},
-    });
+    };
 
-    return project.save();
+    console.log('Project data to save:', projectData);
+
+    const project = new this.projectModel(projectData);
+    const savedProject = await project.save();
+    
+    console.log('=== PROJECT CREATION SUCCESS ===');
+    console.log('Saved project ID:', savedProject._id);
+    
+    return savedProject;
+  } catch (error) {
+    console.log('=== PROJECT CREATION ERROR ===');
+    console.error('Error details:', error);
+    
+    // Handle specific Mongoose errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = {};
+      for (const field in error.errors) {
+        validationErrors[field] = error.errors[field].message;
+      }
+      console.error('Validation errors:', validationErrors);
+      throw new BadRequestException(`Validation failed: ${JSON.stringify(validationErrors)}`);
+    }
+    
+    if (error.name === 'CastError') {
+      throw new BadRequestException(`Invalid data format: ${error.message}`);
+    }
+    
+    throw new BadRequestException(error.message || 'Internal server error');
   }
+}
 
   async findByFarmer(farmerId: string, status?: string): Promise<ProjectDocument[]> {
     const query: any = { farmer: farmerId };
@@ -178,7 +220,7 @@ export class ProjectsService {
     
     if (updateDto.documents) {
       updateData['dueDiligence.documents'] = [
-        ...project.dueDiligence.documents,
+        ...(project.dueDiligence.documents || []),
         ...updateDto.documents.map(doc => ({
           ...doc,
           uploadedAt: new Date(),

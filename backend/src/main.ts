@@ -102,7 +102,12 @@ Authorization: Bearer <your-jwt-token>
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document, {
     customSiteTitle: 'RootRise API Docs',
-    customfavIcon: 'https://nestjs.com/img/logo-small.svg',
+    customfavIcon: 'https://your-logo-url.com/favicon.ico', // Replace with your logo URL
+    customCss: `
+      .topbar-wrapper img { content: url('https://your-logo-url.com/logo.png'); width: 150px; height: auto; }
+      .swagger-ui .topbar { background-color: #16a34a; }
+      .swagger-ui .info .title { color: #16a34a; }
+    `,
     swaggerOptions: {
       persistAuthorization: true,
       docExpansion: 'none',

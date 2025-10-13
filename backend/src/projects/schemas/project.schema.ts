@@ -1,7 +1,39 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 
+// schemas/project.schema.ts
+
 export type ProjectDocument = Project & Document;
+
+class DueDiligenceDocument {
+  name: string;
+  url: string;
+  uploadedAt: Date;
+}
+
+class DueDiligence {
+  assignedTo?: Types.ObjectId;
+  status: string;
+  notes: string;
+  documents: DueDiligenceDocument[];
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+class Verification {
+  verifiedBy?: Types.ObjectId;
+  verifiedAt?: Date;
+  documentHash: string;
+  blockchainTxHash: string;
+  rejectionReason: string;
+}
+
+class ProjectDocumentItem {
+  name: string;
+  url: string;
+  documentType: string;
+  uploadedAt: Date;
+}
 
 @Schema({ timestamps: true })
 export class Project {
@@ -29,27 +61,14 @@ export class Project {
   @Prop({ required: true })
   location: string;
 
-  @Prop()
-  duration: string;
+  @Prop({ required: true })
+  timeline: string;
 
   @Prop({ type: [String], default: [] })
   images: string[];
 
-  @Prop({
-    type: [{
-      name: String,
-      url: String,
-      documentType: String,
-      uploadedAt: { type: Date, default: Date.now }
-    }],
-    default: []
-  })
-  documents: {
-    name: string;
-    url: string;
-    documentType: string;
-    uploadedAt: Date;
-  }[];
+  @Prop({ type: [Object], default: [] })
+  documents: ProjectDocumentItem[];
 
   @Prop({
     type: String,
@@ -58,58 +77,11 @@ export class Project {
   })
   status: string;
 
-  @Prop({
-    type: {
-      assignedTo: { type: Types.ObjectId, ref: 'User', default: null },
-      status: {
-        type: String,
-        enum: ['pending', 'in_progress', 'completed'],
-        default: 'pending'
-      },
-      notes: { type: String, default: '' },
-      documents: {
-        type: [{
-          name: String,
-          url: String,
-          uploadedAt: { type: Date, default: Date.now }
-        }],
-        default: []
-      },
-      startedAt: { type: Date, default: null },
-      completedAt: { type: Date, default: null }
-    },
-    default: {}
-  })
-  dueDiligence: {
-    assignedTo: Types.ObjectId;
-    status: string;
-    notes: string;
-    documents: {
-      name: string;
-      url: string;
-      uploadedAt: Date;
-    }[];
-    startedAt: Date;
-    completedAt: Date;
-  };
+  @Prop({ type: Object, default: {} })
+  dueDiligence: DueDiligence;
 
-  @Prop({
-    type: {
-      verifiedBy: { type: Types.ObjectId, ref: 'User', default: null },
-      verifiedAt: { type: Date, default: null },
-      documentHash: { type: String, default: '' },
-      blockchainTxHash: { type: String, default: '' },
-      rejectionReason: { type: String, default: '' }
-    },
-    default: {}
-  })
-  verification: {
-    verifiedBy: Types.ObjectId;
-    verifiedAt: Date;
-    documentHash: string;
-    blockchainTxHash: string;
-    rejectionReason: string;
-  };
+  @Prop({ type: Object, default: {} })
+  verification: Verification;
 
   @Prop({ default: 0 })
   currentFunding: number;
