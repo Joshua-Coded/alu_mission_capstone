@@ -1,18 +1,27 @@
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
-import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { hash } from "bcryptjs";
-import { createHash, randomBytes } from "crypto";
+import { Types } from "mongoose";
+import { GovernmentDepartment, ProjectCategory, UserRole } from "../common/enums/user-role.enum";
 import { EmailService } from "../email/email.service";
 import { UsersService } from "../users/users.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 
+import { 
+  BadRequestException, 
+  ConflictException, 
+  Injectable, 
+  Logger, 
+  UnauthorizedException,
+  InternalServerErrorException 
+} from "@nestjs/common";
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private userCache = new Map<string, any>();
 
   constructor(
     private usersService: UsersService,
@@ -21,252 +30,341 @@ export class AuthService {
     private emailService: EmailService,
   ) {}
 
+  private safeUserId(user: any): string {
+    if (!user || !user._id) {
+      throw new Error('Invalid user object - missing _id');
+    }
+    
+    const userId = user._id;
+    if (typeof userId === 'string' && Types.ObjectId.isValid(userId)) {
+      return userId;
+    }
+    
+    if (userId instanceof Types.ObjectId) {
+      return userId.toString();
+    }
+    
+    throw new Error('Invalid user ID format');
+  }
+
   async register(registerDto: RegisterDto) {
-    this.logger.log(`Registration attempt for email: ${registerDto.email}`);
-  
-    // Check if user already exists
-    const existingUser = await this.usersService.findByEmail(registerDto.email);
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
-    }
-  
-    // Check if wallet address is already used (only if provided)
-    if (registerDto.walletAddress) {
-      const existingWallet = await this.usersService.findByWalletAddress(registerDto.walletAddress);
-      if (existingWallet) {
-        throw new ConflictException('Wallet address already registered');
-      }
-    }
-  
-    // Hash password
-    const hashedPassword = await bcrypt.hash(registerDto.password, 12);
-  
-    // Generate email verification token
-    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
-    const emailVerificationTokenExpires = new Date();
-    emailVerificationTokenExpires.setHours(emailVerificationTokenExpires.getHours() + 24);
-  
-    // Create user data object
-    const userData: any = {
-      email: registerDto.email.toLowerCase(),
-      password: hashedPassword,
-      firstName: registerDto.firstName,
-      lastName: registerDto.lastName,
-      phoneNumber: registerDto.phoneNumber,
-      role: registerDto.role,
-      emailVerificationToken,
-      emailVerificationTokenExpires,
-      emailVerified: false,
-    };
-  
-    // Only add optional fields if they exist
-    if (registerDto.walletAddress) {
-      userData.walletAddress = registerDto.walletAddress.toLowerCase();
-    }
-    if (registerDto.mobileMoneyAccount) {
-      userData.mobileMoneyAccount = registerDto.mobileMoneyAccount;
-    }
-    if (registerDto.location) {
-      userData.location = registerDto.location;
-    }
-    if (registerDto.bio) {
-      userData.bio = registerDto.bio;
-    }
-  
-    const user = await this.usersService.create(userData);
-    this.logger.log(`User registered successfully: ${user.email}`);
-  
-    // Send verification email
+    this.logger.log(`Registration: ${registerDto.email} (${registerDto.role})`);
+    
     try {
-      await this.emailService.sendVerificationEmail(
-        user.email,
-        user.firstName,
-        emailVerificationToken
-      );
-      this.logger.log(`Verification email sent to: ${user.email}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send verification email: ${error.message}`);
-    }
+      // Validate role
+      if (!Object.values(UserRole).includes(registerDto.role)) {
+        throw new BadRequestException(`Invalid role: ${registerDto.role}`);
+      }
   
+      // Check existing user
+      const existingUser = await this.usersService.findByEmail(registerDto.email);
+      if (existingUser) {
+        throw new ConflictException('User with this email already exists');
+      }
+  
+      // Check wallet
+      if (registerDto.walletAddress) {
+        const existingWallet = await this.usersService.findByWalletAddress(registerDto.walletAddress);
+        if (existingWallet) {
+          throw new ConflictException('Wallet address already registered');
+        }
+      }
+  
+      // Government validation
+      if (registerDto.role === UserRole.GOVERNMENT_OFFICIAL) {
+        this.validateGovernmentFields(registerDto);
+      }
+  
+      // ✅ FIXED: Hash password properly
+      const hashedPassword = await bcrypt.hash(registerDto.password, 12);
+      
+      const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+      const emailVerificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  
+      // Build user data
+      const userData: any = {
+        email: registerDto.email.toLowerCase().trim(),
+        password: hashedPassword,
+        firstName: registerDto.firstName.trim(),
+        lastName: registerDto.lastName.trim(),
+        phoneNumber: registerDto.phoneNumber.trim(),
+        role: registerDto.role,
+        roles: [registerDto.role],
+        isActive: true, // ✅ FIXED: Set to true so user can login after verification
+        emailVerified: false,
+        emailVerificationToken,
+        emailVerificationTokenExpires,
+        termsAccepted: registerDto.termsAccepted,
+        location: registerDto.location?.trim(),
+      };
+  
+      // Government fields
+      if (registerDto.role === UserRole.GOVERNMENT_OFFICIAL) {
+        userData.department = registerDto.department || GovernmentDepartment.GENERAL;
+        userData.specializations = registerDto.specializations || [];
+        userData.bio = registerDto.bio?.trim();
+        userData.currentWorkload = 0;
+        userData.maxWorkload = 10;
+        userData.projectsReviewed = 0;
+        userData.projectsApproved = 0;
+        userData.averageProcessingTime = 0;
+      } else {
+        userData.walletAddress = registerDto.walletAddress?.toLowerCase().trim();
+        userData.mobileMoneyAccount = registerDto.mobileMoneyAccount?.trim();
+      }
+  
+      this.logger.log(`Creating user: ${userData.email}`);
+      const user = await this.usersService.create(userData);
+      
+      const userId = this.safeUserId(user);
+      this.userCache.set(userId, user);
+  
+      // Send verification email
+      try {
+        await this.emailService.sendVerificationEmail(
+          user.email,
+          `${user.firstName} ${user.lastName}`,
+          emailVerificationToken
+        );
+        this.logger.log(`✅ Verification email sent to: ${user.email}`);
+      } catch (emailError: any) {
+        this.logger.error(`❌ Email sending failed: ${emailError.message}`);
+      }
+  
+      return {
+        message: 'Registration successful! Please verify your email.',
+        user: this.formatUserResponse(user),
+      };
+  
+    } catch (error: any) {
+      this.logger.error(`Registration failed: ${error.message}`);
+      if (error instanceof ConflictException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Registration failed');
+    }
+  }
+
+  private validateGovernmentFields(registerDto: RegisterDto) {
+    const departments = Object.values(GovernmentDepartment);
+    if (!registerDto.department || !departments.includes(registerDto.department)) {
+      throw new BadRequestException(`Invalid department: ${String(registerDto.department)}`);
+    }
+
+    const categories = Object.values(ProjectCategory);
+    if (!registerDto.specializations?.length || registerDto.specializations.some(
+      spec => !categories.includes(spec)
+    )) {
+      throw new BadRequestException('Valid specializations required');
+    }
+
+    if (!registerDto.location?.trim()) {
+      throw new BadRequestException('Location required for government officials');
+    }
+  }
+
+  private formatUserResponse(user: any): any {
+    const userId = this.safeUserId(user);
     return {
-      message: 'Registration successful! Please check your email to verify your account.',
-      user: {
-        id: (user._id as any).toString(),
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        walletAddress: user.walletAddress || null,
-        emailVerified: user.emailVerified,
-      },
+      id: userId,
+      _id: userId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      roles: user.roles || [user.role],
+      phoneNumber: user.phoneNumber,
+      walletAddress: user.walletAddress || null,
+      location: user.location || null,
+      bio: user.bio || null,
+      department: user.department || null,
+      specializations: user.specializations || [],
+      emailVerified: Boolean(user.emailVerified),
+      isActive: Boolean(user.isActive),
+      isGovernmentOfficial: user.role === UserRole.GOVERNMENT_OFFICIAL,
+      currentWorkload: Number(user.currentWorkload) || 0,
+      maxWorkload: Number(user.maxWorkload) || 10,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 
   async login(loginDto: LoginDto) {
-    this.logger.log(`Login attempt for email: ${loginDto.email}`);
-
-    const user = await this.usersService.findByEmail(loginDto.email);
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
-    }
-
-    if (!user.emailVerified) {
-      this.logger.warn(`User ${user.email} logged in with unverified email`);
-    }
-
-    // Update last login
-    const userId = (user._id as any).toString();
-    await this.usersService.updateLastLogin(userId);
-    this.logger.log(`User logged in successfully: ${user.email}`);
-
-    const payload = { 
-      email: user.email, 
-      sub: userId,
-      role: user.role,
-      walletAddress: user.walletAddress 
-    };
-
-    return {
-      access_token: this.jwtService.sign(payload),
-      user: {
-        id: userId,
+    this.logger.log(`🔐 LOGIN START: ${loginDto.email}`);
+    
+    try {
+      // Find user
+      const user = await this.usersService.findByEmail(loginDto.email);
+      
+      if (!user) {
+        this.logger.error(`❌ USER NOT FOUND: ${loginDto.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      this.logger.log(`✅ USER FOUND: ${user.email}`);
+  
+      // ✅ FIXED: Check password FIRST before other validations
+      const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+      
+      if (!isPasswordValid) {
+        this.logger.error(`❌ INVALID PASSWORD for: ${user.email}`);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      
+      this.logger.log(`✅ PASSWORD VALID: ${user.email}`);
+  
+      // Check email verification
+      if (!user.emailVerified) {
+        this.logger.error(`❌ EMAIL NOT VERIFIED: ${user.email}`);
+        throw new UnauthorizedException('Please verify your email before logging in');
+      }
+      this.logger.log(`✅ EMAIL VERIFIED: ${user.email}`);
+  
+      // Check account active
+      if (!user.isActive) {
+        this.logger.error(`❌ ACCOUNT INACTIVE: ${user.email}`);
+        throw new UnauthorizedException('Account is deactivated');
+      }
+      this.logger.log(`✅ ACCOUNT ACTIVE: ${user.email}`);
+  
+      // Update last login
+      const userId = this.safeUserId(user);
+      await this.usersService.updateLastLogin(userId);
+      this.userCache.set(userId, user);
+  
+      // Generate token
+      const payload = {
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        sub: userId,
+        userId,
         role: user.role,
-        walletAddress: user.walletAddress,
-        emailVerified: user.emailVerified,
-        lastLogin: new Date(),
-      },
-      message: user.emailVerified ? 'Login successful' : 'Login successful - Please verify your email address',
-    };
+        roles: user.roles || [user.role],
+        department: user.department,
+        specializations: user.specializations,
+      };
+  
+      const accessToken = this.jwtService.sign(payload);
+      this.logger.log(`✅ LOGIN SUCCESSFUL: ${user.email}`);
+  
+      return {
+        access_token: accessToken,
+        user: this.formatUserResponse(user),
+        message: 'Login successful',
+      };
+  
+    } catch (error) {
+      this.logger.error(`💥 LOGIN ERROR for ${loginDto.email}:`, error.message);
+      throw error;
+    }
   }
 
   async verifyEmail(token: string) {
-    this.logger.log(`Email verification attempt with token: ${token.substring(0, 8)}...`);
-
     const user = await this.usersService.verifyEmail(token);
     if (!user) {
-      throw new BadRequestException('Invalid or expired verification token');
+      throw new BadRequestException('Invalid or expired token');
     }
 
-    this.logger.log(`Email verified successfully for user: ${user.email}`);
+    try {
+      const userId = this.safeUserId(user);
+      this.clearUserCache(userId);
+    } catch (cacheError) {
+      this.logger.warn('Cache clear failed:', cacheError);
+    }
 
-    // Send welcome email
     try {
       await this.emailService.sendWelcomeEmail(
         user.email,
-        user.firstName,
+        `${user.firstName} ${user.lastName}`,
         user.role
       );
-      this.logger.log(`Welcome email sent to: ${user.email}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send welcome email: ${error.message}`);
+    } catch (emailError) {
+      this.logger.warn('Welcome email failed:', emailError);
     }
 
     return {
-      message: 'Email verified successfully! Welcome to RootRise.',
-      user: {
-        id: (user._id as any).toString(),
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        emailVerified: true,
-      },
+      message: 'Email verified successfully!',
+      user: this.formatUserResponse(user),
     };
   }
 
   async resendVerificationEmail(email: string) {
     const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      throw new BadRequestException('User not found');
+    if (!user || user.emailVerified) {
+      throw new BadRequestException('Invalid request');
     }
 
-    if (user.emailVerified) {
-      throw new BadRequestException('Email is already verified');
-    }
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    
+    const userId = this.safeUserId(user);
+    await this.usersService.updateEmailVerificationToken(userId, token, expires);
 
-    // Generate new verification token
-    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
-    const emailVerificationTokenExpires = new Date();
-    emailVerificationTokenExpires.setHours(emailVerificationTokenExpires.getHours() + 24);
-
-    const userId = (user._id as any).toString();
-    await this.usersService.updateEmailVerificationToken(
-      userId,
-      emailVerificationToken,
-      emailVerificationTokenExpires
-    );
-
-    // Send verification email
     await this.emailService.sendVerificationEmail(
       user.email,
-      user.firstName,
-      emailVerificationToken
+      `${user.firstName} ${user.lastName}`,
+      token
     );
 
-    this.logger.log(`Verification email resent to: ${user.email}`);
-
-    return {
-      message: 'Verification email sent successfully! Please check your inbox.',
-    };
+    return { message: 'Verification email sent!' };
   }
 
-  // ==================== PASSWORD RESET METHODS ====================
-
-  async forgotPassword(email: string): Promise<{ message: string }> {
-    const user = await this.usersService.findByEmail(email);
-    
-    if (!user) {
-      // Don't reveal if user exists or not for security
-      return { message: 'If the email exists, a password reset link has been sent' };
+  async getUserById(userId: string) {
+    if (this.userCache.has(userId)) {
+      return this.userCache.get(userId);
     }
 
-    // Generate reset token
-    const resetToken = randomBytes(32).toString('hex');
-    const hashedToken = createHash('sha256').update(resetToken).digest('hex');
-    const expires = new Date(Date.now() + 3600000); // 1 hour
-    const userId = (user._id as any).toString();
+    const user = await this.usersService.findById(userId);
+    if (user) {
+      this.userCache.set(userId, user);
+      setTimeout(() => this.userCache.delete(userId), 5 * 60 * 60 * 1000);
+    }
+    return user;
+  }
 
+  clearUserCache(userId: string) {
+    this.userCache.delete(userId);
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      return { message: 'Password reset email sent if user exists' };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const expires = new Date(Date.now() + 3600000);
+    
+    const userId = this.safeUserId(user);
     await this.usersService.updatePasswordResetToken(userId, hashedToken, expires);
-
-    // Send password reset email
+    
     await this.emailService.sendPasswordResetEmail(
       user.email,
       user.firstName,
-      resetToken
+      token
     );
 
-    return { message: 'If the email exists, a password reset link has been sent' };
+    return { message: 'Password reset email sent if user exists' };
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-    // Hash the token to match the stored hashed token
-    const hashedToken = createHash('sha256').update(token).digest('hex');
-    
+  async resetPassword(token: string, newPassword: string) {
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
     const user = await this.usersService.findByPasswordResetToken(hashedToken);
     
     if (!user) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new BadRequestException('Invalid or expired token');
     }
 
-    // Hash the new password
-    const hashedPassword = await hash(newPassword, 10);
-    const userId = (user._id as any).toString();
-
-    // Update password and clear reset token
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const userId = this.safeUserId(user);
+    
     await this.usersService.updatePassword(userId, hashedPassword);
+    this.clearUserCache(userId);
 
     return { message: 'Password reset successful' };
+  }
+
+  async updateWalletAddress(userId: string, walletAddress: string) {
+    return this.usersService.updateWalletAddress(userId, walletAddress);
   }
 }

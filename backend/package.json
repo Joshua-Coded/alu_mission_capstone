@@ -36,6 +36,7 @@
     "class-validator": "^0.14.2",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
+    "ethers": "^6.15.0",
     "mongoose": "^8.18.1",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.6",

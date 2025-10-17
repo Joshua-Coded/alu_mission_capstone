@@ -2,14 +2,10 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
-import { UsersService } from "../../users/users.service";
-
-// src/auth/strategies/jwt.strategy.ts - COMPLETE FIX
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private usersService: UsersService,
     private configService: ConfigService,
   ) {
     const jwtSecret = configService.get<string>('JWT_SECRET');
@@ -27,56 +23,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     console.log('🔐 JWT Validation - Payload:', payload);
     
-    if (!payload.sub) {
-      throw new UnauthorizedException('Invalid token: missing user ID');
+    // ✅ FIXED: No database lookup - just validate the JWT payload
+    if (!payload.sub || !payload.email || !payload.role) {
+      throw new UnauthorizedException('Invalid token: missing required fields');
     }
 
-    try {
-      // ✅ Properly handle the null case
-      const user = await this.usersService.findById(payload.sub);
-      
-      if (!user) {
-        console.error('❌ User not found for ID:', payload.sub);
-        throw new UnauthorizedException('User not found');
-      }
+    console.log('✅ JWT Validation Successful (No DB lookup)');
 
-      if (!user.isActive) {
-        console.error('❌ User account deactivated:', payload.sub);
-        throw new UnauthorizedException('Account is deactivated');
-      }
-
-      // ✅ Safe extraction of user ID - Mongoose documents always have _id
-      const userId = (user as any)._id?.toString?.();
-      
-      if (!userId) {
-        console.error('❌ Could not extract user ID from user object');
-        throw new UnauthorizedException('Invalid user data');
-      }
-
-      console.log('✅ JWT Validation Successful:', {
-        userId,
-        email: user.email,
-        role: user.role,
-        name: `${user.firstName} ${user.lastName}`
-      });
-
-      // ✅ Return the exact format your controller expects
-      return {
-        userId: userId,
-        email: user.email,
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName
-      };
-      
-    } catch (error) {
-      console.error('❌ JWT Validation Error:', error);
-      
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      
-      throw new UnauthorizedException('Authentication failed');
-    }
+    // ✅ Return the payload directly - no database query
+    return {
+      userId: payload.sub, // Use sub as userId
+      email: payload.email,
+      role: payload.role,
+      // Add any other fields from the original JWT payload
+      iat: payload.iat,
+      exp: payload.exp
+    };
   }
 }
