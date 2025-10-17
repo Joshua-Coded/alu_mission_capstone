@@ -1,8 +1,8 @@
 "use client";
 import NextLink from "next/link";
 import React from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSearchParams } from "next/navigation";
+import { useAccount, useBalance, useDisconnect } from "wagmi";
 
 import {
   Box,
@@ -23,10 +23,9 @@ import {
   BreadcrumbLink,
   Badge,
   useColorMode,
-  Input,
-  InputGroup,
-  InputLeftElement,
+  useToast,
   Tooltip,
+  VStack,
 } from '@chakra-ui/react';
 import { 
   FiMenu,
@@ -37,13 +36,13 @@ import {
   FiLogOut,
   FiSun,
   FiMoon,
-  FiSearch,
   FiHelpCircle,
+  FiCopy,
+  FiExternalLink,
 } from 'react-icons/fi';
 
 interface TopHeaderProps {
   user: any;
-  address: string | undefined;
   onLogout: () => void;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
@@ -51,12 +50,16 @@ interface TopHeaderProps {
 
 const TopHeader: React.FC<TopHeaderProps> = ({
   user,
-  address,
   onLogout,
   onToggleSidebar,
   sidebarCollapsed
 }) => {
   const { colorMode, toggleColorMode } = useColorMode();
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { data: balance } = useBalance({ address });
+  const toast = useToast();
+  
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const textColor = useColorModeValue('gray.800', 'gray.100');
@@ -65,35 +68,55 @@ const TopHeader: React.FC<TopHeaderProps> = ({
   
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
-  const notificationCount = 3;
+  const notificationCount = 0; // TODO: Get from API
 
   const getCurrentPageName = () => {
-    if (currentTab) {
-      return currentTab.charAt(0).toUpperCase() + currentTab.slice(1);
-    }
-    return 'Dashboard';
+    if (!currentTab) return 'Dashboard';
+    return currentTab.charAt(0).toUpperCase() + currentTab.slice(1).replace(/-/g, ' ');
   };
 
   const getPageDescription = () => {
-    const descriptions = {
-      projects: 'Manage your agricultural projects and track funding progress',
-      investments: 'View your investment history and returns',
-      investors: 'Connect with and manage your investor relationships',
-      analytics: 'Analyze your farm performance and financial metrics',
-      schedule: 'Plan and track your farming activities',
-      location: 'Manage your farm locations and geographic data',
-      crops: 'Track your crops, seeds, and planting schedules',
-      inventory: 'Manage your farm equipment and inventory',
-      profile: 'Update your farmer profile and verification status',
-      settings: 'Configure your account and notification preferences',
+    const descriptions: Record<string, string> = {
+      projects: 'Manage your agricultural projects and track funding',
+      inventory: 'Track equipment, supplies, and resources',
+      profile: 'Update your farmer profile and settings',
     };
     
-    return descriptions[currentTab as keyof typeof descriptions] || 
-           'Overview of your farming operations and recent activity';
+    return descriptions[currentTab || ''] || 
+           'Overview of your farming operations';
   };
 
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  const handleCopyAddress = () => {
+    if (address) {
+      navigator.clipboard.writeText(address);
+      toast({
+        title: 'Copied!',
+        description: 'Wallet address copied to clipboard',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleDisconnect = () => {
+    disconnect();
+    toast({
+      title: 'Disconnected',
+      description: 'Wallet disconnected successfully',
+      status: 'info',
+      duration: 2000,
+    });
+  };
+
+  const handleViewOnEtherscan = () => {
+    if (address) {
+      window.open(`https://sepolia.etherscan.io/address/${address}`, '_blank');
+    }
   };
 
   return (
@@ -101,15 +124,15 @@ const TopHeader: React.FC<TopHeaderProps> = ({
       bg={bg}
       borderBottom="1px"
       borderColor={borderColor}
-      position="sticky"
+      position="fixed"
       top={0}
+      left={sidebarCollapsed ? '70px' : '280px'}
+      right={0}
       zIndex={998}
-      ml={sidebarCollapsed ? '70px' : '280px'}
-      transition="all 0.3s ease"
+      transition="left 0.3s ease"
       shadow="sm"
-      backdropFilter="blur(10px)"
     >
-      <Container maxW="full" py={4}>
+      <Container maxW="full" py={3} px={6}>
         <Flex justify="space-between" align="center">
           
           {/* Left Section - Page Info */}
@@ -121,19 +144,14 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                 variant="ghost"
                 onClick={onToggleSidebar}
                 size="md"
-                bg={useColorModeValue('gray.50', 'gray.700')}
-                _hover={{
-                  bg: useColorModeValue('gray.100', 'gray.600'),
-                }}
                 borderRadius="lg"
               />
             </Tooltip>
             
-            <Box flex="1" maxW="500px" minW="0">
-              {/* Page Title */}
+            <Box flex="1" minW="0">
               <HStack spacing={3} mb={1} align="center">
                 <Text 
-                  fontSize={{ base: "lg", md: "xl" }} 
+                  fontSize="xl"
                   fontWeight="bold" 
                   color={textColor}
                   noOfLines={1}
@@ -143,321 +161,182 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                 {currentTab === 'profile' && (
                   <Badge 
                     colorScheme="green" 
-                    size="sm" 
-                    variant="subtle"
-                    borderRadius="full"
+                    fontSize="xs"
+                    px={2}
+                    py={1}
                   >
-                    Verified
+                    ✓ Verified
                   </Badge>
                 )}
               </HStack>
               
-              {/* Breadcrumbs */}
               <Breadcrumb 
-                fontSize="sm" 
-                color={subtleTextColor} 
-                mb={2}
+                fontSize="xs" 
+                color={subtleTextColor}
                 separator="/"
               >
                 <BreadcrumbItem>
-                  <BreadcrumbLink 
-                    as={NextLink} 
-                    href="/dashboard"
-                    _hover={{ color: 'brand.500' }}
-                    transition="color 0.2s"
-                  >
+                  <BreadcrumbLink as={NextLink} href="/dashboard/farmer">
                     Dashboard
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbItem>
-                  <BreadcrumbLink 
-                    as={NextLink} 
-                    href="/dashboard/farmer"
-                    _hover={{ color: 'brand.500' }}
-                    transition="color 0.2s"
-                  >
-                    Farmer
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 {currentTab && (
                   <BreadcrumbItem isCurrentPage>
-                    <BreadcrumbLink color={textColor} fontWeight="medium">
+                    <BreadcrumbLink fontWeight="medium">
                       {getCurrentPageName()}
                     </BreadcrumbLink>
                   </BreadcrumbItem>
                 )}
               </Breadcrumb>
               
-              {/* Page Description */}
               <Text 
-                fontSize="sm" 
+                fontSize="xs" 
                 color={mutedTextColor} 
                 display={{ base: 'none', lg: 'block' }}
                 noOfLines={1}
+                mt={1}
               >
                 {getPageDescription()}
               </Text>
             </Box>
           </HStack>
 
-          {/* Center Section - Search */}
-          <HStack 
-            spacing={4} 
-            flex="0.8" 
-            justify="center" 
-            display={{ base: 'none', xl: 'flex' }}
-            maxW="400px"
-          >
-            <InputGroup>
-              <InputLeftElement pointerEvents="none" color={subtleTextColor}>
-                <FiSearch size="16" />
-              </InputLeftElement>
-              <Input
-                placeholder="Search projects, investors, crops..."
-                size="md"
-                borderRadius="lg"
-                bg={useColorModeValue('gray.50', 'gray.700')}
-                border="1px"
-                borderColor={useColorModeValue('gray.200', 'gray.600')}
-                _focus={{
-                  bg: useColorModeValue('white', 'gray.600'),
-                  shadow: 'sm',
-                  borderColor: 'brand.500',
-                  transform: 'scale(1.02)',
-                }}
-                _placeholder={{ color: subtleTextColor }}
-                transition="all 0.2s"
-              />
-            </InputGroup>
-          </HStack>
-
           {/* Right Section - Actions */}
-          <HStack spacing={2} flex="1" justify="flex-end" minW="0">
+          <HStack spacing={2}>
             
-            {/* Wallet Dropdown */}
-            <Menu>
-              <MenuButton
-                as={Button}
-                rightIcon={<FiChevronDown />}
-                variant="ghost"
-                size="sm"
-                bg={useColorModeValue('gray.50', 'gray.700')}
-                _hover={{
-                  bg: useColorModeValue('gray.100', 'gray.600'),
-                }}
-                _active={{
-                  bg: useColorModeValue('gray.100', 'gray.600'),
-                }}
-                borderRadius="lg"
-                border="1px"
-                borderColor={useColorModeValue('gray.200', 'gray.600')}
-                transition="all 0.2s"
-                fontWeight="medium"
-                px={3}
-              >
-                <HStack spacing={2}>
-                  <Box
-                    w="8px"
-                    h="8px"
-                    borderRadius="full"
-                    bg={address ? 'green.500' : 'gray.400'}
-                    transition="all 0.2s"
-                  />
-                  <Text fontSize="sm" color={textColor}>
-                    {address ? formatAddress(address) : 'Connect Wallet'}
-                  </Text>
-                </HStack>
-              </MenuButton>
-              
-              <MenuList 
-                shadow="xl" 
-                border="1px" 
-                borderColor={borderColor}
-                bg={bg}
-                borderRadius="xl"
-                overflow="hidden"
-                minW="280px"
-              >
-                {address ? (
-                  // Connected Wallet Menu
-                  <>
-                    <Box px={4} py={4} borderBottom="1px" borderColor={borderColor}>
-                      <HStack spacing={3} mb={3}>
+            {/* Wallet Menu */}
+            {isConnected && address ? (
+              <Menu>
+                <MenuButton
+                  as={Button}
+                  rightIcon={<FiChevronDown />}
+                  variant="outline"
+                  size="sm"
+                  borderRadius="lg"
+                  fontWeight="medium"
+                  px={3}
+                >
+                  <HStack spacing={2}>
+                    <Box w="6px" h="6px" borderRadius="full" bg="green.500" />
+                    <Text fontSize="sm">{formatAddress(address)}</Text>
+                  </HStack>
+                </MenuButton>
+                
+                <MenuList shadow="xl" minW="280px">
+                  <Box px={4} py={3} borderBottom="1px" borderColor={borderColor}>
+                    <VStack align="start" spacing={2}>
+                      <HStack spacing={2}>
                         <Box
-                          w="32px"
-                          h="32px"
+                          w="24px"
+                          h="24px"
                           borderRadius="full"
                           bg="green.500"
                           display="flex"
                           alignItems="center"
                           justifyContent="center"
                           color="white"
+                          fontSize="xs"
                         >
-                          <Text fontSize="xs">🔗</Text>
+                          ✓
                         </Box>
-                        <Box flex="1">
-                          <Text fontSize="sm" fontWeight="semibold" color={textColor}>
+                        <VStack align="start" spacing={0}>
+                          <Text fontSize="sm" fontWeight="semibold">
                             Wallet Connected
                           </Text>
                           <Text fontSize="xs" color={subtleTextColor}>
                             MetaMask
                           </Text>
-                        </Box>
+                        </VStack>
                       </HStack>
                       
-                      <Box mb={3}>
+                      <Box w="full">
                         <Text fontSize="xs" color={subtleTextColor} mb={1}>
                           Address
                         </Text>
                         <Text 
-                          fontSize="sm" 
+                          fontSize="xs" 
                           fontFamily="mono" 
-                          fontWeight="medium" 
-                          color={textColor}
-                          bg={useColorModeValue('gray.50', 'gray.800')}
+                          bg={useColorModeValue('gray.50', 'gray.700')}
                           px={2}
                           py={1}
                           borderRadius="md"
+                          noOfLines={1}
                         >
                           {address}
                         </Text>
                       </Box>
                       
-                      <Box>
-                        <Text fontSize="xs" color={subtleTextColor} mb={1}>
-                          Balance
-                        </Text>
-                        <HStack justify="space-between">
-                          <Text fontSize="sm" fontWeight="medium" color={textColor}>
-                            0.040 ETH
+                      {balance && (
+                        <Box w="full">
+                          <Text fontSize="xs" color={subtleTextColor} mb={1}>
+                            Balance
                           </Text>
-                          <Text fontSize="xs" color={subtleTextColor}>
-                            ~$95.20
-                          </Text>
-                        </HStack>
-                      </Box>
-                    </Box>
-                    
-                    <MenuItem 
-                      onClick={() => window.open(`https://etherscan.io/address/${address}`, '_blank')}
-                      _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}
-                      py={3}
-                    >
-                      <Text fontSize="sm">View on Etherscan</Text>
-                    </MenuItem>
-                    
-                    <MenuItem 
-                      onClick={() => {
-                        navigator.clipboard.writeText(address);
-                        // Add toast notification here if needed
-                      }}
-                      _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}
-                      py={3}
-                    >
-                      <Text fontSize="sm">Copy Address</Text>
-                    </MenuItem>
-                    
-                    <MenuDivider />
-                    
-                    <MenuItem 
-                      onClick={() => {
-                        // Add your wallet disconnect logic here
-                        console.log('Disconnecting wallet...');
-                      }}
-                      color="red.500"
-                      _hover={{ bg: useColorModeValue('red.50', 'red.900') }}
-                      py={3}
-                    >
-                      <Text fontSize="sm">Disconnect Wallet</Text>
-                    </MenuItem>
-                  </>
-                ) : (
-                  // Not Connected Menu
-                  <>
-                    <Box px={4} py={4} borderBottom="1px" borderColor={borderColor}>
-                      <HStack spacing={3} mb={3}>
-                        <Box
-                          w="32px"
-                          h="32px"
-                          borderRadius="full"
-                          bg="gray.400"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          color="white"
-                        >
-                          <Text fontSize="xs">🔗</Text>
-                        </Box>
-                        <Box flex="1">
-                          <Text fontSize="sm" fontWeight="semibold" color={textColor}>
-                            No Wallet Connected
-                          </Text>
-                          <Text fontSize="xs" color={subtleTextColor}>
-                            Connect to get started
+                          <Text fontSize="sm" fontWeight="semibold">
+                            {parseFloat(balance.formatted).toFixed(4)} {balance.symbol}
                           </Text>
                         </Box>
-                      </HStack>
-                    </Box>
-                    
-                    <Box px={4} py={3}>
-                      <ConnectButton />
-                    </Box>
-                    
-                    <Box px={4} py={3}>
-                      <Text fontSize="xs" color={subtleTextColor} textAlign="center">
-                        Connect your wallet to access farming features
-                      </Text>
-                    </Box>
-                  </>
-                )}
-              </MenuList>
-            </Menu>
+                      )}
+                    </VStack>
+                  </Box>
+                  
+                  <MenuItem icon={<FiCopy />} onClick={handleCopyAddress}>
+                    Copy Address
+                  </MenuItem>
+                  
+                  <MenuItem icon={<FiExternalLink />} onClick={handleViewOnEtherscan}>
+                    View on Etherscan
+                  </MenuItem>
+                  
+                  <MenuDivider />
+                  
+                  <MenuItem 
+                    icon={<FiLogOut />}
+                    onClick={handleDisconnect}
+                    color="red.500"
+                  >
+                    Disconnect Wallet
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            ) : (
+              <Button
+                size="sm"
+                colorScheme="green"
+                borderRadius="lg"
+                onClick={() => toast({
+                  title: 'Connect Wallet',
+                  description: 'Please connect your wallet from the sidebar',
+                  status: 'info',
+                  duration: 3000,
+                })}
+              >
+                Connect Wallet
+              </Button>
+            )}
 
             {/* Action Buttons */}
             <HStack spacing={1}>
-              {/* Color Mode Toggle */}
-              <Tooltip 
-                label={`Switch to ${colorMode === 'light' ? 'dark' : 'light'} mode`}
-                fontSize="xs"
-              >
+              <Tooltip label={`${colorMode === 'light' ? 'Dark' : 'Light'} mode`} fontSize="xs">
                 <IconButton
                   aria-label="Toggle color mode"
                   icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
                   variant="ghost"
                   onClick={toggleColorMode}
                   size="sm"
-                  bg={useColorModeValue('gray.50', 'gray.700')}
-                  _hover={{
-                    bg: useColorModeValue('gray.100', 'gray.600'),
-                    transform: 'scale(1.05)',
-                  }}
                   borderRadius="lg"
-                  border="1px"
-                  borderColor={useColorModeValue('gray.200', 'gray.600')}
-                  transition="all 0.2s"
                 />
               </Tooltip>
 
-              {/* Help Button */}
               <Tooltip label="Help & Support" fontSize="xs">
                 <IconButton
                   aria-label="Help"
                   icon={<FiHelpCircle />}
                   variant="ghost"
                   size="sm"
-                  bg={useColorModeValue('gray.50', 'gray.700')}
-                  _hover={{
-                    bg: useColorModeValue('gray.100', 'gray.600'),
-                    transform: 'scale(1.05)',
-                  }}
                   borderRadius="lg"
-                  border="1px"
-                  borderColor={useColorModeValue('gray.200', 'gray.600')}
-                  transition="all 0.2s"
                 />
               </Tooltip>
 
-              {/* Notifications */}
               <Tooltip label="Notifications" fontSize="xs">
                 <Box position="relative">
                   <IconButton
@@ -465,35 +344,23 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                     icon={<FiBell />}
                     variant="ghost"
                     size="sm"
-                    bg={useColorModeValue('gray.50', 'gray.700')}
-                    _hover={{
-                      bg: useColorModeValue('gray.100', 'gray.600'),
-                      transform: 'scale(1.05)',
-                    }}
                     borderRadius="lg"
-                    border="1px"
-                    borderColor={useColorModeValue('gray.200', 'gray.600')}
-                    transition="all 0.2s"
                   />
                   {notificationCount > 0 && (
                     <Badge
                       position="absolute"
-                      top="-2px"
-                      right="-2px"
+                      top="-1px"
+                      right="-1px"
                       colorScheme="red"
                       borderRadius="full"
                       fontSize="2xs"
-                      minW="18px"
-                      h="18px"
+                      minW="16px"
+                      h="16px"
                       display="flex"
                       alignItems="center"
                       justifyContent="center"
-                      border="2px"
-                      borderColor={bg}
-                      fontWeight="bold"
-                      animation="pulse 2s infinite"
                     >
-                      {notificationCount > 99 ? '99+' : notificationCount}
+                      {notificationCount > 9 ? '9+' : notificationCount}
                     </Badge>
                   )}
                 </Box>
@@ -508,45 +375,22 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                 variant="ghost"
                 size="sm"
                 leftIcon={<FiUser />}
-                bg={useColorModeValue('gray.50', 'gray.700')}
-                _hover={{
-                  bg: useColorModeValue('gray.100', 'gray.600'),
-                }}
-                _active={{
-                  bg: useColorModeValue('gray.100', 'gray.600'),
-                }}
                 borderRadius="lg"
-                border="1px"
-                borderColor={useColorModeValue('gray.200', 'gray.600')}
-                transition="all 0.2s"
                 fontWeight="medium"
               >
-                <Text 
-                  display={{ base: 'none', md: 'block' }}
-                  color={textColor}
-                  fontSize="sm"
-                >
+                <Text display={{ base: 'none', md: 'block' }} fontSize="sm">
                   {user?.firstName || 'User'}
                 </Text>
               </MenuButton>
               
-              <MenuList 
-                shadow="xl" 
-                border="1px" 
-                borderColor={borderColor}
-                bg={bg}
-                borderRadius="xl"
-                overflow="hidden"
-                minW="240px"
-              >
-                {/* User Info Section */}
-                <Box px={4} py={4} borderBottom="1px" borderColor={borderColor}>
+              <MenuList shadow="xl" minW="240px">
+                <Box px={4} py={3} borderBottom="1px" borderColor={borderColor}>
                   <HStack spacing={3}>
                     <Box
-                      w="40px"
-                      h="40px"
+                      w="36px"
+                      h="36px"
                       borderRadius="full"
-                      bg="brand.500"
+                      bg="green.500"
                       display="flex"
                       alignItems="center"
                       justifyContent="center"
@@ -554,44 +398,33 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                       fontSize="sm"
                       fontWeight="bold"
                     >
-                      {user?.firstName?.[0]}{user?.lastName?.[0] || 'U'}
+                      {user?.firstName?.[0]}{user?.lastName?.[0]}
                     </Box>
-                    <Box flex="1" minW="0">
-                      <Text fontWeight="semibold" fontSize="sm" color={textColor} noOfLines={1}>
+                    <VStack align="start" spacing={0} flex={1} minW="0">
+                      <Text fontWeight="semibold" fontSize="sm" noOfLines={1}>
                         {user?.firstName} {user?.lastName}
                       </Text>
                       <Text fontSize="xs" color={subtleTextColor} noOfLines={1}>
                         {user?.email}
                       </Text>
-                      <Badge 
-                        colorScheme="green" 
-                        size="sm" 
-                        mt={1}
-                        variant="subtle"
-                        borderRadius="full"
-                      >
-                        Verified Farmer
+                      <Badge colorScheme="green" fontSize="xs" mt={1}>
+                        Farmer
                       </Badge>
-                    </Box>
+                    </VStack>
                   </HStack>
                 </Box>
                 
-                {/* Menu Items */}
                 <MenuItem 
                   icon={<FiUser />}
                   onClick={() => window.location.href = '/dashboard/farmer?tab=profile'}
-                  _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}
-                  py={3}
                 >
-                  <Text fontSize="sm">Profile Settings</Text>
+                  Profile Settings
                 </MenuItem>
                 <MenuItem 
                   icon={<FiSettings />}
                   onClick={() => window.location.href = '/dashboard/farmer?tab=settings'}
-                  _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}
-                  py={3}
                 >
-                  <Text fontSize="sm">Account Settings</Text>
+                  Account Settings
                 </MenuItem>
                 
                 <MenuDivider />
@@ -600,10 +433,8 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                   icon={<FiLogOut />} 
                   onClick={onLogout} 
                   color="red.500"
-                  _hover={{ bg: useColorModeValue('red.50', 'red.900') }}
-                  py={3}
                 >
-                  <Text fontSize="sm">Logout</Text>
+                  Logout
                 </MenuItem>
               </MenuList>
             </Menu>

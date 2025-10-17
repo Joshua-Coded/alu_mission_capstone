@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Project as ApiProject, projectApi } from "../../../lib/projectApi";
 
-// components/dashboard/farmer/ProjectDetailsModal.tsx
-
 import {
   Modal,
   ModalOverlay,
@@ -14,7 +12,6 @@ import {
   HStack,
   Text,
   Badge,
-  Progress,
   Image,
   Box,
   Tabs,
@@ -34,7 +31,13 @@ import {
   Icon,
   List,
   ListItem,
-  ListIcon,
+  Link,
+  Code,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  Progress,
 } from '@chakra-ui/react';
 import { 
   FiMapPin, 
@@ -44,29 +47,17 @@ import {
   FiCheckCircle,
   FiClock,
   FiFileText,
-  FiSend
+  FiDatabase,
+  FiLink,
+  FiAlertCircle,
+  FiRefreshCw,
+  FiDownload,
 } from 'react-icons/fi';
-
-interface Project {
-  id: string;
-  name: string;
-  progress: number;
-  funding: string;
-  fundingGoal: string;
-  investors: number;
-  phase: string;
-  roi: string;
-  status: string;
-  description: string;
-  expectedHarvest: string;
-  location: string;
-  images?: string[];
-}
 
 interface ProjectDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: Project | null;
+  project: ApiProject | null;
 }
 
 const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
@@ -76,23 +67,28 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
 }) => {
   const [fullProject, setFullProject] = useState<ApiProject | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [blockchainStatus, setBlockchainStatus] = useState<any>(null);
+  const [refreshingBlockchain, setRefreshingBlockchain] = useState(false);
   const toast = useToast();
 
-  // Fetch full project details
   useEffect(() => {
     const fetchProjectDetails = async () => {
-      if (project?.id && isOpen) {
+      if (project?._id && isOpen) {
         setIsLoading(true);
         try {
-          const data = await projectApi.getProjectById(project.id);
+          const data = await projectApi.getProjectById(project._id);
           setFullProject(data);
+          
+          if (data.blockchainStatus === 'created') {
+            fetchBlockchainStatus(data._id);
+          }
         } catch (error: any) {
           toast({
             title: 'Error',
             description: error.message || 'Failed to load project details',
             status: 'error',
             duration: 3000,
+            isClosable: true,
           });
         } finally {
           setIsLoading(false);
@@ -101,52 +97,67 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
     };
 
     fetchProjectDetails();
-  }, [project?.id, isOpen]);
+  }, [project?._id, isOpen]);
 
-  if (!project) return null;
-
-  const handleSubmitForReview = async () => {
-    if (!fullProject || fullProject.status !== 'draft') {
-      toast({
-        title: 'Cannot Submit',
-        description: 'Only draft projects can be submitted for review',
-        status: 'error',
-        duration: 3000,
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
+  const fetchBlockchainStatus = async (projectId: string) => {
     try {
-      await projectApi.submitProject(project.id);
-      
-      toast({
-        title: 'Submitted Successfully',
-        description: 'Your project has been submitted for government verification',
-        status: 'success',
-        duration: 5000,
-      });
-
-      // Refresh project details
-      const updatedData = await projectApi.getProjectById(project.id);
-      setFullProject(updatedData);
+      setRefreshingBlockchain(true);
+      const status = await projectApi.getBlockchainStatus(projectId);
+      setBlockchainStatus(status);
     } catch (error: any) {
-      toast({
-        title: 'Submission Failed',
-        description: error.message || 'Failed to submit project',
-        status: 'error',
-        duration: 5000,
-      });
+      console.error('Failed to fetch blockchain status:', error);
     } finally {
-      setIsSubmitting(false);
+      setRefreshingBlockchain(false);
     }
   };
 
+  const handleRefreshBlockchain = async () => {
+    if (fullProject) {
+      await fetchBlockchainStatus(fullProject._id);
+      toast({
+        title: 'Refreshed',
+        description: 'Blockchain status updated',
+        status: 'success',
+        duration: 2000,
+      });
+    }
+  };
+
+  const handleSyncBlockchain = async () => {
+    if (!fullProject) return;
+    
+    try {
+      setRefreshingBlockchain(true);
+      await projectApi.syncBlockchainStatus(fullProject._id);
+      
+      const updatedData = await projectApi.getProjectById(fullProject._id);
+      setFullProject(updatedData);
+      
+      toast({
+        title: 'Synced Successfully',
+        description: 'Blockchain data synchronized',
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message || 'Failed to sync with blockchain',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setRefreshingBlockchain(false);
+    }
+  };
+
+  if (!project) return null;
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      draft: 'gray',
-      submitted: 'yellow',
-      under_review: 'blue',
+      submitted: 'orange',
+      under_review: 'yellow',
       active: 'green',
       rejected: 'red',
       funded: 'purple',
@@ -156,51 +167,66 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
   };
 
   const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      draft: 'Draft',
-      submitted: 'Submitted',
-      under_review: 'Under Review',
-      active: 'Active',
-      rejected: 'Rejected',
-      funded: 'Funded',
-      closed: 'Closed',
-    };
-    return labels[status] || status;
+    return status.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
   };
 
+  const isOnBlockchain = fullProject?.blockchainStatus === 'created';
+  const progressPercentage = fullProject 
+    ? Math.min((fullProject.currentFunding / fullProject.fundingGoal) * 100, 100)
+    : 0;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>
+    <Modal isOpen={isOpen} onClose={onClose} size="5xl" scrollBehavior="inside">
+      <ModalOverlay backdropFilter="blur(4px)" />
+      <ModalContent maxH="90vh">
+        <ModalHeader borderBottom="1px" borderColor="gray.200">
           <VStack align="start" spacing={2}>
-            <HStack>
-              <Text>{project.name}</Text>
+            <HStack spacing={3} wrap="wrap">
+              <Text fontSize="xl" fontWeight="bold">{project.title}</Text>
               {fullProject && (
-                <Badge colorScheme={getStatusColor(fullProject.status)}>
-                  {getStatusLabel(fullProject.status)}
-                </Badge>
+                <>
+                  <Badge colorScheme={getStatusColor(fullProject.status)} fontSize="sm" px={3} py={1}>
+                    {getStatusLabel(fullProject.status)}
+                  </Badge>
+                  {isOnBlockchain && (
+                    <Badge colorScheme="blue" fontSize="sm" px={3} py={1}>
+                      <HStack spacing={1}>
+                        <Icon as={FiDatabase} boxSize={3} />
+                        <Text>On Blockchain</Text>
+                      </HStack>
+                    </Badge>
+                  )}
+                </>
               )}
             </HStack>
-            <Text fontSize="sm" color="gray.600" fontWeight="normal">
-              {project.description}
-            </Text>
+            <HStack spacing={4} fontSize="sm" color="gray.600">
+              <HStack>
+                <Icon as={FiMapPin} />
+                <Text>{project.location}</Text>
+              </HStack>
+              <HStack>
+                <Icon as={FiCalendar} />
+                <Text>{project.timeline}</Text>
+              </HStack>
+            </HStack>
           </VStack>
         </ModalHeader>
         <ModalCloseButton />
         
-        <ModalBody>
+        <ModalBody py={6}>
           {isLoading ? (
             <VStack spacing={4} py={12}>
-              <Spinner size="xl" color="brand.500" thickness="4px" />
+              <Spinner size="xl" color="green.500" thickness="4px" />
               <Text color="gray.600">Loading project details...</Text>
             </VStack>
           ) : fullProject ? (
-            <Tabs variant="enclosed" colorScheme="brand">
+            <Tabs variant="enclosed" colorScheme="green">
               <TabList>
                 <Tab>Overview</Tab>
                 <Tab>Details</Tab>
-                <Tab>Due Diligence</Tab>
+                <Tab>Blockchain</Tab>
                 <Tab>Documents</Tab>
               </TabList>
 
@@ -208,85 +234,102 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                 {/* Overview Tab */}
                 <TabPanel>
                   <VStack spacing={6} align="stretch">
-                    {/* Quick Actions */}
-                    {fullProject.status === 'draft' && (
-                      <Box p={4} bg="blue.50" borderRadius="lg" border="1px" borderColor="blue.200">
-                        <VStack spacing={3}>
-                          <HStack>
-                            <Icon as={FiSend} color="blue.500" />
-                            <Text fontWeight="medium" color="blue.800">
-                              Ready to submit?
-                            </Text>
-                          </HStack>
-                          <Text fontSize="sm" color="blue.700">
-                            Submit your project for government verification to make it visible to investors.
-                          </Text>
-                          <Button
-                            colorScheme="blue"
-                            size="sm"
-                            onClick={handleSubmitForReview}
-                            isLoading={isSubmitting}
-                            loadingText="Submitting..."
-                            leftIcon={<FiSend />}
-                          >
-                            Submit for Review
-                          </Button>
-                        </VStack>
-                      </Box>
+                    {/* Status Alerts */}
+                    {fullProject.status === 'submitted' && (
+                      <Alert status="info" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Under Review</AlertTitle>
+                          <AlertDescription>
+                            Your project is being reviewed by government officials. You'll be notified once approved.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
                     )}
 
-                    {/* Key Stats */}
-                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
-                      <Stat>
-                        <StatLabel fontSize="xs">Funding Goal</StatLabel>
-                        <StatNumber fontSize="lg">
-                          ${fullProject.fundingGoal.toLocaleString()}
-                        </StatNumber>
-                      </Stat>
-                      <Stat>
-                        <StatLabel fontSize="xs">Current Funding</StatLabel>
-                        <StatNumber fontSize="lg">
-                          ${fullProject.currentFunding.toLocaleString()}
-                        </StatNumber>
-                        <StatHelpText>
-                          {Math.round((fullProject.currentFunding / fullProject.fundingGoal) * 100)}% funded
-                        </StatHelpText>
-                      </Stat>
-                      <Stat>
-                        <StatLabel fontSize="xs">Contributors</StatLabel>
-                        <StatNumber fontSize="lg">{fullProject.contributorsCount}</StatNumber>
-                      </Stat>
-                      <Stat>
-                        <StatLabel fontSize="xs">Category</StatLabel>
-                        <StatNumber fontSize="md">{fullProject.category}</StatNumber>
-                      </Stat>
-                    </SimpleGrid>
+                    {fullProject.status === 'active' && (
+                      <Alert status="success" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Project Approved ✓</AlertTitle>
+                          <AlertDescription>
+                            Your project is active and accepting contributions from investors.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
+                    )}
+
+                    {fullProject.blockchainStatus === 'failed' && (
+                      <Alert status="error" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Blockchain Error</AlertTitle>
+                          <AlertDescription>
+                            Project exists locally but failed to create on blockchain. Contact support.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
+                    )}
 
                     {/* Funding Progress */}
                     <Box>
-                      <Text fontWeight="semibold" color="brand.600" mb={3}>
+                      <Text fontWeight="bold" mb={3} fontSize="lg" color="green.600">
                         Funding Progress
                       </Text>
-                      <Progress 
-                        value={(fullProject.currentFunding / fullProject.fundingGoal) * 100} 
-                        colorScheme="brand" 
-                        size="lg" 
-                        borderRadius="md"
-                      />
-                      <HStack justify="space-between" mt={2}>
-                        <Text fontSize="sm" color="gray.600">
-                          ${fullProject.currentFunding.toLocaleString()} raised
-                        </Text>
-                        <Text fontSize="sm" color="gray.600">
-                          ${fullProject.fundingGoal.toLocaleString()} goal
-                        </Text>
-                      </HStack>
+                      <VStack spacing={3} align="stretch">
+                        <HStack justify="space-between">
+                          <Text fontSize="sm" color="gray.600">Current / Goal</Text>
+                          <Text fontSize="lg" fontWeight="bold" color="green.600">
+                            ${fullProject.currentFunding.toLocaleString()} / ${fullProject.fundingGoal.toLocaleString()}
+                          </Text>
+                        </HStack>
+                        <Progress 
+                          value={progressPercentage} 
+                          colorScheme="green" 
+                          size="lg" 
+                          borderRadius="full"
+                        />
+                        <HStack justify="space-between">
+                          <Text fontSize="sm" color="gray.600">
+                            {progressPercentage.toFixed(1)}% funded
+                          </Text>
+                          <Badge colorScheme={progressPercentage >= 100 ? 'green' : 'blue'}>
+                            {progressPercentage >= 100 ? 'Fully Funded' : 'In Progress'}
+                          </Badge>
+                        </HStack>
+                      </VStack>
                     </Box>
+
+                    {/* Key Stats */}
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
+                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                        <StatLabel fontSize="xs">Funding Goal</StatLabel>
+                        <StatNumber fontSize="xl" color="green.600">
+                          ${fullProject.fundingGoal.toLocaleString()}
+                        </StatNumber>
+                      </Stat>
+                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                        <StatLabel fontSize="xs">Current Funding</StatLabel>
+                        <StatNumber fontSize="xl" color="blue.600">
+                          ${fullProject.currentFunding.toLocaleString()}
+                        </StatNumber>
+                      </Stat>
+                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                        <StatLabel fontSize="xs">Contributors</StatLabel>
+                        <StatNumber fontSize="xl">{fullProject.contributorsCount}</StatNumber>
+                      </Stat>
+                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                        <StatLabel fontSize="xs">Progress</StatLabel>
+                        <StatNumber fontSize="xl" color="purple.600">
+                          {Math.round(progressPercentage)}%
+                        </StatNumber>
+                      </Stat>
+                    </SimpleGrid>
 
                     {/* Project Images */}
                     {fullProject.images && fullProject.images.length > 0 && (
                       <Box>
-                        <Text fontWeight="semibold" color="brand.600" mb={3}>
+                        <Text fontWeight="bold" mb={3} fontSize="lg">
                           Project Images
                         </Text>
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
@@ -297,13 +340,25 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                               alt={`${fullProject.title} ${index + 1}`}
                               borderRadius="lg"
                               w="full"
-                              h="200px"
+                              h="250px"
                               objectFit="cover"
+                              border="1px"
+                              borderColor="gray.200"
                             />
                           ))}
                         </SimpleGrid>
                       </Box>
                     )}
+
+                    {/* Description */}
+                    <Box>
+                      <Text fontWeight="bold" mb={3} fontSize="lg">
+                        Description
+                      </Text>
+                      <Text fontSize="sm" color="gray.700" whiteSpace="pre-wrap" lineHeight="tall">
+                        {fullProject.description}
+                      </Text>
+                    </Box>
                   </VStack>
                 </TabPanel>
 
@@ -311,80 +366,87 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                 <TabPanel>
                   <VStack spacing={6} align="stretch">
                     <Box>
-                      <Text fontWeight="semibold" color="brand.600" mb={3}>
+                      <Text fontWeight="bold" mb={4} fontSize="lg">
                         Project Information
                       </Text>
-                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                         <HStack>
-                          <Icon as={FiMapPin} color="gray.500" />
+                          <Icon as={FiMapPin} color="green.500" boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.600">Location</Text>
+                            <Text fontSize="xs" color="gray.500">Location</Text>
                             <Text fontSize="sm" fontWeight="medium">{fullProject.location}</Text>
                           </VStack>
                         </HStack>
                         
                         <HStack>
-                          <Icon as={FiCalendar} color="gray.500" />
+                          <Icon as={FiCalendar} color="purple.500" boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.600">Timeline</Text>
+                            <Text fontSize="xs" color="gray.500">Timeline</Text>
                             <Text fontSize="sm" fontWeight="medium">{fullProject.timeline}</Text>
                           </VStack>
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiDollarSign} color="gray.500" />
+                          <Icon as={FiDatabase} color="blue.500" boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.600">Category</Text>
-                            <Text fontSize="sm" fontWeight="medium">{fullProject.category}</Text>
+                            <Text fontSize="xs" color="gray.500">Category</Text>
+                            <Badge colorScheme="blue">{fullProject.category.replace(/_/g, ' ')}</Badge>
                           </VStack>
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiClock} color="gray.500" />
+                          <Icon as={FiClock} color="orange.500" boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.600">Created</Text>
+                            <Text fontSize="xs" color="gray.500">Created</Text>
                             <Text fontSize="sm" fontWeight="medium">
                               {new Date(fullProject.createdAt).toLocaleDateString()}
                             </Text>
                           </VStack>
                         </HStack>
+
+                        {fullProject.blockchainProjectId !== undefined && (
+                          <HStack>
+                            <Icon as={FiDatabase} color="blue.500" boxSize={5} />
+                            <VStack align="start" spacing={0}>
+                              <Text fontSize="xs" color="gray.500">Blockchain ID</Text>
+                              <Badge colorScheme="blue" fontSize="sm">
+                                #{fullProject.blockchainProjectId}
+                              </Badge>
+                            </VStack>
+                          </HStack>
+                        )}
                       </SimpleGrid>
-                    </Box>
-
-                    <Divider />
-
-                    <Box>
-                      <Text fontWeight="semibold" color="brand.600" mb={3}>
-                        Description
-                      </Text>
-                      <Text fontSize="sm" color="gray.700" whiteSpace="pre-wrap">
-                        {fullProject.description}
-                      </Text>
                     </Box>
 
                     {fullProject.farmer && typeof fullProject.farmer !== 'string' && (
                       <>
                         <Divider />
                         <Box>
-                          <Text fontWeight="semibold" color="brand.600" mb={3}>
+                          <Text fontWeight="bold" mb={4} fontSize="lg">
                             Farmer Information
                           </Text>
-                          <VStack align="start" spacing={2}>
-                            <Text fontSize="sm">
-                              <strong>Name:</strong> {fullProject.farmer.firstName} {fullProject.farmer.lastName}
-                            </Text>
-                            <Text fontSize="sm">
-                              <strong>Email:</strong> {fullProject.farmer.email}
-                            </Text>
+                          <VStack align="start" spacing={3} bg="gray.50" p={4} borderRadius="lg">
+                            <HStack>
+                              <Text fontSize="sm" fontWeight="medium" color="gray.600">Name:</Text>
+                              <Text fontSize="sm">{fullProject.farmer.firstName} {fullProject.farmer.lastName}</Text>
+                            </HStack>
+                            <HStack>
+                              <Text fontSize="sm" fontWeight="medium" color="gray.600">Email:</Text>
+                              <Text fontSize="sm">{fullProject.farmer.email}</Text>
+                            </HStack>
                             {fullProject.farmer.phoneNumber && (
-                              <Text fontSize="sm">
-                                <strong>Phone:</strong> {fullProject.farmer.phoneNumber}
-                              </Text>
+                              <HStack>
+                                <Text fontSize="sm" fontWeight="medium" color="gray.600">Phone:</Text>
+                                <Text fontSize="sm">{fullProject.farmer.phoneNumber}</Text>
+                              </HStack>
                             )}
-                            {fullProject.farmer.location && (
-                              <Text fontSize="sm">
-                                <strong>Location:</strong> {fullProject.farmer.location}
-                              </Text>
+                            {fullProject.farmer.walletAddress && (
+                              <VStack align="start" spacing={1} w="full">
+                                <Text fontSize="sm" fontWeight="medium" color="gray.600">Wallet Address:</Text>
+                                <Code fontSize="xs" p={2} w="full">
+                                  {fullProject.farmer.walletAddress}
+                                </Code>
+                              </VStack>
                             )}
                           </VStack>
                         </Box>
@@ -393,61 +455,150 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                   </VStack>
                 </TabPanel>
 
-                {/* Due Diligence Tab */}
+                {/* Blockchain Tab */}
                 <TabPanel>
-                  <VStack spacing={4} align="stretch">
-                    <Text fontWeight="semibold" color="brand.600">
-                      Due Diligence Status
-                    </Text>
-                    
-                    {fullProject.dueDiligence ? (
-                      <VStack align="stretch" spacing={4}>
-                        <Box p={4} bg="gray.50" borderRadius="lg">
-                          <HStack spacing={3} mb={3}>
-                            <Icon as={FiCheckCircle} color="blue.500" boxSize={5} />
-                            <Text fontWeight="medium">Status: {fullProject.dueDiligence.status}</Text>
-                          </HStack>
-                          
-                          {fullProject.dueDiligence.assignedTo && (
-                            <Text fontSize="sm" color="gray.600" mb={2}>
-                              Assigned to: {typeof fullProject.dueDiligence.assignedTo === 'string' 
-                                ? fullProject.dueDiligence.assignedTo 
-                                : `${fullProject.dueDiligence.assignedTo.firstName} ${fullProject.dueDiligence.assignedTo.lastName}`}
-                            </Text>
-                          )}
-                          
-                          {fullProject.dueDiligence.notes && (
-                            <Box mt={3}>
-                              <Text fontSize="sm" fontWeight="medium" mb={1}>Notes:</Text>
-                              <Text fontSize="sm" color="gray.700">
-                                {fullProject.dueDiligence.notes}
-                              </Text>
-                            </Box>
-                          )}
-                        </Box>
+                  <VStack spacing={6} align="stretch">
+                    <HStack justify="space-between">
+                      <Text fontWeight="bold" fontSize="lg">
+                        Blockchain Information
+                      </Text>
+                      <HStack spacing={2}>
+                        <Button
+                          size="sm"
+                          leftIcon={<FiRefreshCw />}
+                          onClick={handleRefreshBlockchain}
+                          isLoading={refreshingBlockchain}
+                          variant="outline"
+                        >
+                          Refresh
+                        </Button>
+                        <Button
+                          size="sm"
+                          leftIcon={<FiDatabase />}
+                          onClick={handleSyncBlockchain}
+                          isLoading={refreshingBlockchain}
+                          colorScheme="blue"
+                        >
+                          Sync
+                        </Button>
+                      </HStack>
+                    </HStack>
 
-                        {fullProject.dueDiligence.documents && fullProject.dueDiligence.documents.length > 0 && (
-                          <Box>
-                            <Text fontSize="sm" fontWeight="medium" mb={2}>
-                              Due Diligence Documents:
-                            </Text>
-                            <List spacing={2}>
-                              {fullProject.dueDiligence.documents.map((doc, index) => (
-                                <ListItem key={index} fontSize="sm">
-                                  <ListIcon as={FiFileText} color="blue.500" />
-                                  <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                                    {doc.name}
-                                  </a>
-                                </ListItem>
-                              ))}
-                            </List>
+                    {isOnBlockchain ? (
+                      <VStack spacing={4} align="stretch">
+                        <Alert status="success" borderRadius="lg">
+                          <AlertIcon />
+                          <Box flex="1">
+                            <AlertTitle>On Blockchain ⛓️</AlertTitle>
+                            <AlertDescription>
+                              Your project has been successfully created on the Ethereum blockchain
+                            </AlertDescription>
+                          </Box>
+                        </Alert>
+
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                          <Stat bg="blue.50" p={4} borderRadius="lg">
+                            <StatLabel>Blockchain ID</StatLabel>
+                            <StatNumber fontSize="2xl" color="blue.600">
+                              #{fullProject.blockchainProjectId}
+                            </StatNumber>
+                          </Stat>
+
+                          <Stat bg="green.50" p={4} borderRadius="lg">
+                            <StatLabel>Status</StatLabel>
+                            <StatNumber>
+                              <Badge colorScheme="green" fontSize="md">Active</Badge>
+                            </StatNumber>
+                          </Stat>
+
+                          {fullProject.blockchainCreatedAt && (
+                            <Stat bg="purple.50" p={4} borderRadius="lg">
+                              <StatLabel>Created On</StatLabel>
+                              <StatNumber fontSize="sm">
+                                {new Date(fullProject.blockchainCreatedAt).toLocaleDateString()}
+                              </StatNumber>
+                            </Stat>
+                          )}
+
+                          {fullProject.blockchainTxHash && (
+                            <Stat bg="gray.50" p={4} borderRadius="lg">
+                              <StatLabel>Transaction</StatLabel>
+                              <Link
+                                href={`https://sepolia.etherscan.io/tx/${fullProject.blockchainTxHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                color="blue.600"
+                                fontSize="sm"
+                                display="flex"
+                                alignItems="center"
+                                gap={1}
+                                _hover={{ textDecoration: 'underline' }}
+                              >
+                                <FiLink size={14} />
+                                View on Etherscan
+                              </Link>
+                            </Stat>
+                          )}
+                        </SimpleGrid>
+
+                        {blockchainStatus && (
+                          <Box p={4} bg="blue.50" borderRadius="lg" border="1px" borderColor="blue.200">
+                            <Text fontWeight="bold" mb={3}>Live Blockchain Data</Text>
+                            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                              <HStack justify="space-between">
+                                <Text fontSize="sm">On-chain Funding:</Text>
+                                <Badge colorScheme="green">{blockchainStatus.totalFunding || '0'} ETH</Badge>
+                              </HStack>
+                              <HStack justify="space-between">
+                                <Text fontSize="sm">Funding Goal:</Text>
+                                <Badge>{blockchainStatus.fundingGoal || '0'} ETH</Badge>
+                              </HStack>
+                              <HStack justify="space-between">
+                                <Text fontSize="sm">Fully Funded:</Text>
+                                <Badge colorScheme={blockchainStatus.isFunded ? 'green' : 'yellow'}>
+                                  {blockchainStatus.isFunded ? 'Yes' : 'No'}
+                                </Badge>
+                              </HStack>
+                              <HStack justify="space-between">
+                                <Text fontSize="sm">Can Complete:</Text>
+                                <Badge colorScheme={blockchainStatus.canComplete ? 'green' : 'gray'}>
+                                  {blockchainStatus.canComplete ? 'Yes' : 'No'}
+                                </Badge>
+                              </HStack>
+                            </SimpleGrid>
                           </Box>
                         )}
                       </VStack>
+                    ) : fullProject.blockchainStatus === 'failed' ? (
+                      <Alert status="error" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Blockchain Creation Failed</AlertTitle>
+                          <AlertDescription>
+                            Project exists locally but could not be created on blockchain. Contact support.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
+                    ) : fullProject.blockchainStatus === 'pending' ? (
+                      <Alert status="warning" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Creating on Blockchain...</AlertTitle>
+                          <AlertDescription>
+                            Your project is being created on the blockchain. This may take a few minutes.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
                     ) : (
-                      <Text color="gray.500" fontSize="sm">
-                        No due diligence information available yet.
-                      </Text>
+                      <Alert status="info" borderRadius="lg">
+                        <AlertIcon />
+                        <Box flex="1">
+                          <AlertTitle>Not on Blockchain Yet</AlertTitle>
+                          <AlertDescription>
+                            Project will be created on blockchain after government verification.
+                          </AlertDescription>
+                        </Box>
+                      </Alert>
                     )}
                   </VStack>
                 </TabPanel>
@@ -455,7 +606,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                 {/* Documents Tab */}
                 <TabPanel>
                   <VStack spacing={4} align="stretch">
-                    <Text fontWeight="semibold" color="brand.600">
+                    <Text fontWeight="bold" fontSize="lg">
                       Project Documents
                     </Text>
                     
@@ -464,24 +615,42 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         {fullProject.documents.map((doc, index) => (
                           <ListItem 
                             key={index} 
-                            p={3} 
+                            p={4} 
                             bg="gray.50" 
-                            borderRadius="md"
-                            _hover={{ bg: 'gray.100' }}
+                            borderRadius="lg"
+                            border="1px"
+                            borderColor="gray.200"
+                            _hover={{ bg: 'gray.100', borderColor: 'green.300' }}
+                            transition="all 0.2s"
                           >
                             <HStack justify="space-between">
-                              <HStack>
-                                <Icon as={FiFileText} color="blue.500" />
-                                <Text fontSize="sm" fontWeight="medium">{doc.name}</Text>
+                              <HStack spacing={3}>
+                                <Icon as={FiFileText} color="blue.500" boxSize={5} />
+                                <VStack align="start" spacing={1}>
+                                  <Text fontSize="sm" fontWeight="medium">
+                                    {doc.name || 'Unnamed Document'}
+                                  </Text>
+                                  <HStack spacing={3} fontSize="xs" color="gray.500">
+                                    <Text>
+                                      {doc.name?.split('.')?.pop()?.toUpperCase() || 'FILE'}
+                                    </Text>
+                                    {(doc as any).uploadedAt && (
+                                      <Text>
+                                        {new Date((doc as any).uploadedAt).toLocaleDateString()}
+                                      </Text>
+                                    )}
+                                  </HStack>
+                                </VStack>
                               </HStack>
                               <Button
                                 as="a"
                                 href={doc.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                size="xs"
-                                colorScheme="blue"
-                                variant="outline"
+                                size="sm"
+                                colorScheme="green"
+                                leftIcon={<FiDownload />}
+                                isDisabled={!doc.url}
                               >
                                 Download
                               </Button>
@@ -490,9 +659,12 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         ))}
                       </List>
                     ) : (
-                      <Text color="gray.500" fontSize="sm">
-                        No documents uploaded for this project.
-                      </Text>
+                      <Box p={8} textAlign="center" bg="gray.50" borderRadius="lg">
+                        <Icon as={FiFileText} boxSize={12} color="gray.400" mb={3} />
+                        <Text color="gray.600" fontSize="sm">
+                          No documents uploaded for this project
+                        </Text>
+                      </Box>
                     )}
                   </VStack>
                 </TabPanel>

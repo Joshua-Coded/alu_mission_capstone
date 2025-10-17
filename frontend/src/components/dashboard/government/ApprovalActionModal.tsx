@@ -1,10 +1,8 @@
+"use client";
 import { useState } from "react";
-import { ApprovalStep } from "@/types/government.types";
+import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
+import { Project as ApiProject } from "@/lib/projectApi";
 
-// ============================================
-// FILE: components/government/ApprovalActionModal.tsx
-// Modal for approving and moving to next step
-// ============================================
 import {
   Modal,
   ModalOverlay,
@@ -18,144 +16,177 @@ import {
   FormControl,
   FormLabel,
   Textarea,
-  Select,
   Text,
   Alert,
   AlertIcon,
   useToast,
   Box,
+  HStack,
+  Icon,
+  Divider,
+  Badge,
 } from '@chakra-ui/react';
 
 interface ApprovalActionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentStep: ApprovalStep;
-  projectName: string;
-  onApprove: (nextStep: ApprovalStep, comment: string) => Promise<void>;
+  onConfirm: (notes?: string) => Promise<void>;
+  project: ApiProject | null;
 }
-
-const WORKFLOW_STEPS = [
-  { step: ApprovalStep.STEP_1_INITIAL_REVIEW, label: 'Initial Review' },
-  { step: ApprovalStep.STEP_2_DOCUMENTATION, label: 'Documentation Verification' },
-  { step: ApprovalStep.STEP_3_LAND_VERIFICATION, label: 'Land Verification' },
-  { step: ApprovalStep.STEP_4_FINANCIAL_REVIEW, label: 'Financial Assessment' },
-  { step: ApprovalStep.STEP_5_TECHNICAL_EVAL, label: 'Technical Evaluation' },
-  { step: ApprovalStep.STEP_6_COMPLIANCE, label: 'Compliance Check' },
-  { step: ApprovalStep.STEP_7_SITE_INSPECTION, label: 'Site Inspection' },
-  { step: ApprovalStep.STEP_8_RISK_ASSESSMENT, label: 'Risk Assessment' },
-  { step: ApprovalStep.STEP_9_FINAL_REVIEW, label: 'Final Review' },
-  { step: ApprovalStep.STEP_10_APPROVED, label: 'Approved' },
-];
 
 export default function ApprovalActionModal({
   isOpen,
   onClose,
-  currentStep,
-  projectName,
-  onApprove,
+  onConfirm,
+  project,
 }: ApprovalActionModalProps) {
   const toast = useToast();
   const [comment, setComment] = useState('');
-  const [nextStep, setNextStep] = useState<ApprovalStep>(ApprovalStep.STEP_2_DOCUMENTATION);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const currentIndex = WORKFLOW_STEPS.findIndex(s => s.step === currentStep);
-  const availableNextSteps = WORKFLOW_STEPS.slice(currentIndex + 1);
 
   const handleSubmit = async () => {
     if (!comment.trim()) {
       toast({
         title: 'Comment Required',
-        description: 'Please provide a comment for this approval',
+        description: 'Please provide approval notes before proceeding',
         status: 'warning',
         duration: 3000,
+        isClosable: true,
       });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await onApprove(nextStep, comment);
+      await onConfirm(comment);
       toast({
-        title: 'Step Approved',
-        description: 'Project has been moved to the next approval step',
+        title: 'Project Approved ✓',
+        description: 'The farmer has been notified and project is now active',
         status: 'success',
-        duration: 3000,
+        duration: 4000,
+        isClosable: true,
       });
       setComment('');
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       toast({
-        title: 'Error',
-        description: 'Failed to approve step',
+        title: 'Approval Failed',
+        description: error.message || 'Failed to approve project. Please try again.',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
+        isClosable: true,
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleClose = () => {
+    if (!isSubmitting) {
+      setComment('');
+      onClose();
+    }
+  };
+
+  if (!project) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <ModalOverlay />
+    <Modal 
+      isOpen={isOpen} 
+      onClose={handleClose} 
+      size="lg"
+      closeOnOverlayClick={!isSubmitting}
+    >
+      <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
-        <ModalHeader>Approve Current Step</ModalHeader>
-        <ModalCloseButton />
+        <ModalHeader>
+          <HStack spacing={3}>
+            <Icon as={FiCheckCircle} color="green.500" boxSize={6} />
+            <Text color="green.600">Approve Project</Text>
+          </HStack>
+        </ModalHeader>
+        <ModalCloseButton isDisabled={isSubmitting} />
+        
         <ModalBody>
-          <VStack spacing={4} align="stretch">
-            <Alert status="info">
-              <AlertIcon />
-              <Box flex="1">
-                <Text fontSize="sm" fontWeight="semibold">Project: {projectName}</Text>
-                <Text fontSize="xs">Current Step: {WORKFLOW_STEPS[currentIndex]?.label}</Text>
-              </Box>
-            </Alert>
+          <VStack spacing={5} align="stretch">
+            {/* Project Info */}
+            <Box p={4} bg="green.50" borderRadius="lg" borderWidth="1px" borderColor="green.200">
+              <VStack align="stretch" spacing={2}>
+                <HStack justify="space-between">
+                  <Text fontSize="sm" fontWeight="semibold" color="green.800">
+                    {project.title}
+                  </Text>
+                  <Badge colorScheme="green" fontSize="xs">
+                    Approval
+                  </Badge>
+                </HStack>
+                <HStack spacing={4} fontSize="xs" color="green.700">
+                  <Text>ID: {project.projectId || project._id.slice(-8)}</Text>
+                  <Text>•</Text>
+                  <Text>Goal: ${project.fundingGoal?.toLocaleString()}</Text>
+                  <Text>•</Text>
+                  <Text>{project.location}</Text>
+                </HStack>
+              </VStack>
+            </Box>
 
+            {/* Approval Notes */}
             <FormControl isRequired>
-              <FormLabel fontSize="sm">Move to Next Step</FormLabel>
-              <Select
-                value={nextStep}
-                onChange={(e) => setNextStep(e.target.value as ApprovalStep)}
-              >
-                {availableNextSteps.map((step) => (
-                  <option key={step.step} value={step.step}>
-                    {step.label}
-                  </option>
-                ))}
-              </Select>
-            </FormControl>
-
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Approval Comment</FormLabel>
+              <FormLabel fontSize="sm" fontWeight="semibold">
+                Approval Notes <Text as="span" color="red.500">*</Text>
+              </FormLabel>
               <Textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Provide detailed comments on your review and approval decision..."
+                placeholder="Enter detailed approval notes: verification findings, compliance status, recommendations..."
                 rows={6}
+                resize="vertical"
+                focusBorderColor="green.400"
               />
+              <Text fontSize="xs" color="gray.500" mt={2}>
+                {comment.length}/500 characters • These notes will be visible to the farmer
+              </Text>
             </FormControl>
 
-            <Alert status="success">
-              <AlertIcon />
-              <Text fontSize="xs">
-                Approving this step will notify the farmer and move the project to the next approval stage.
-              </Text>
+            <Divider />
+
+            {/* Warning Alert */}
+            <Alert status="success" borderRadius="lg" variant="left-accent">
+              <AlertIcon as={FiCheckCircle} />
+              <Box fontSize="sm">
+                <Text fontWeight="medium" mb={1}>
+                  Project will be activated
+                </Text>
+                <Text fontSize="xs" color="gray.600">
+                  • Project becomes visible to investors for funding<br />
+                  • Farmer receives approval notification<br />
+                  • Project status changes to "Active"
+                </Text>
+              </Box>
             </Alert>
           </VStack>
         </ModalBody>
+
         <ModalFooter>
-          <Button variant="outline" mr={3} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button 
-            colorScheme="green" 
-            onClick={handleSubmit}
-            isLoading={isSubmitting}
-            loadingText="Approving..."
-          >
-            Approve & Move Forward
-          </Button>
+          <HStack spacing={3}>
+            <Button 
+              variant="ghost" 
+              onClick={handleClose}
+              isDisabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              colorScheme="green" 
+              onClick={handleSubmit}
+              isLoading={isSubmitting}
+              loadingText="Approving..."
+              leftIcon={<FiCheckCircle />}
+              isDisabled={!comment.trim()}
+            >
+              Approve Project
+            </Button>
+          </HStack>
         </ModalFooter>
       </ModalContent>
     </Modal>

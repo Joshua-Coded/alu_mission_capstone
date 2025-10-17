@@ -5,6 +5,7 @@ export interface User {
   lastName: string;
   role: string; 
   emailVerified: boolean;
+  walletAddress?: string;
 }
 
 export interface Project {

@@ -4,11 +4,11 @@ import React, { Suspense, useState } from "react";
 import RouteGuard from "@/components/RouteGuard";
 import TopHeader from "@/components/dashboard/farmer/TopHeader";
 import WalletConnectionGuard from "@/components/WalletConnectionGuard";
+import WalletSync from "@/components/WalletSync";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Import all tab components from FarmerTabs
 import {
   DashboardTab,
   ProjectsTab,
@@ -26,6 +26,9 @@ import {
   Box,
   Container,
   useColorModeValue,
+  Spinner,
+  VStack,
+  Text,
 } from '@chakra-ui/react';
 
 function DashboardContent() {
@@ -65,6 +68,7 @@ export default function FarmerDashboard() {
   const { user, logout } = useAuth();
   const { address } = useAccount();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const bgColor = useColorModeValue('gray.50', 'gray.900');
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);
@@ -76,7 +80,9 @@ export default function FarmerDashboard() {
         title="Connect Wallet to Farm Dashboard"
         description="Connect your wallet to create projects, receive funding, and track your farming progress on the blockchain."
       >
-        <Box minH="100vh" bg={useColorModeValue('gray.50', 'gray.900')}>
+        <WalletSync />  
+        
+        <Box minH="100vh" bg={bgColor}>
           <FarmerSidebar 
             isCollapsed={sidebarCollapsed}
             user={user}
@@ -84,23 +90,34 @@ export default function FarmerDashboard() {
           
           <TopHeader
             user={user}
-            address={address}
             onLogout={logout}
             onToggleSidebar={toggleSidebar}
             sidebarCollapsed={sidebarCollapsed}
           />
           
+          {/* Added width calculation to fill available space */}
           <Box 
             ml={sidebarCollapsed ? '70px' : '280px'}
             transition="margin-left 0.3s ease"
-            p={8}
-            pt="100px" // Adjust based on your TopHeader height
+            pt="80px"
+            pb={8}
+            px={6}
+            minH="100vh"
+            w={`calc(100% - ${sidebarCollapsed ? '70px' : '280px'})`}
           >
-            <Container maxW="full">
-              <Suspense fallback={<Box>Loading...</Box>}>
+            
+            <Box w="full">
+              <Suspense 
+                fallback={
+                  <VStack spacing={4} py={20}>
+                    <Spinner size="xl" color="green.500" thickness="4px" />
+                    <Text color="gray.600">Loading dashboard...</Text>
+                  </VStack>
+                }
+              >
                 <DashboardContent />
               </Suspense>
-            </Container>
+            </Box>
           </Box>
         </Box>
       </WalletConnectionGuard>

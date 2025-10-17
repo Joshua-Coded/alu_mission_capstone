@@ -3,13 +3,10 @@ import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FiFilter, FiPlus } from "react-icons/fi";
-import { FiChevronDown } from "react-icons/fi";
+import { FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
 import { Project as ApiProject, ProjectStatus, projectApi } from "../../../lib/projectApi";
 import { EditProjectModal } from "./EditProjectModal";
 import { ShareProjectModal } from "./ShareProjectModal";
-
-// components/dashboard/farmer/FarmerProjectsSection.tsx
 
 import {
   Card,
@@ -33,25 +30,13 @@ import {
   VStack,
   Spinner,
   useToast,
+  IconButton,
+  Tooltip,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from '@chakra-ui/react';
-
-// Map backend Project to frontend Project interface
-interface FrontendProject {
-  id: string;
-  name: string;
-  progress: number;
-  funding: string;
-  fundingGoal: string;
-  investors: number;
-  phase: string;
-  roi: string;
-  status: string;
-  description: string;
-  expectedHarvest: string;
-  location: string;
-  images?: string[];
-  videos?: string[];
-}
 
 const FarmerProjectsSection: React.FC = () => {
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -62,9 +47,10 @@ const FarmerProjectsSection: React.FC = () => {
   const filterParam = searchParams.get('filter');
   const actionParam = searchParams.get('action');
   
-  const [selectedProject, setSelectedProject] = useState<FrontendProject | null>(null);
-  const [projects, setProjects] = useState<FrontendProject[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ApiProject | null>(null);
+  const [projects, setProjects] = useState<ApiProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Modal controls
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
@@ -72,87 +58,166 @@ const FarmerProjectsSection: React.FC = () => {
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
 
-  // Convert backend project to frontend format
-  const mapApiProjectToFrontend = (apiProject: ApiProject): FrontendProject => {
-    return {
-      id: apiProject._id,
-      name: apiProject.title,
-      progress: (apiProject.currentFunding / apiProject.fundingGoal) * 100,
-      funding: `$${apiProject.currentFunding.toLocaleString()}`,
-      fundingGoal: `$${apiProject.fundingGoal.toLocaleString()}`,
-      investors: apiProject.contributorsCount,
-      phase: apiProject.status === 'active' ? 'Active' : 
-             apiProject.status === 'draft' ? 'Planning' :
-             apiProject.status === 'submitted' ? 'Under Review' :
-             apiProject.status === 'rejected' ? 'Rejected' : 'Planning',
-      roi: '0%', // Calculate based on your business logic
-      status: apiProject.status,
-      description: apiProject.description,
-      expectedHarvest: apiProject.timeline || 'Not specified',
-      location: apiProject.location,
-      images: apiProject.images || [],
-      videos: [], // Add if you have video support
-    };
-  };
-
   // Fetch projects from backend
-  const loadProjects = async () => {
+  const loadProjects = async (showRefreshToast = false) => {
     try {
-      setLoading(true);
+      if (showRefreshToast) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       
-      // Map status filter to backend status
-      let statusFilter: ProjectStatus | undefined;
-      if (filterParam === 'active') statusFilter = ProjectStatus.ACTIVE;
-      if (filterParam === 'completed') statusFilter = ProjectStatus.FUNDED;
-      if (filterParam === 'funding') statusFilter = ProjectStatus.ACTIVE;
-      if (filterParam === 'pending') statusFilter = ProjectStatus.SUBMITTED;
-
-      const apiProjects = await projectApi.getMyProjects(statusFilter);
-      const mappedProjects = apiProjects.map(mapApiProjectToFrontend);
-      setProjects(mappedProjects);
+      console.log('========================================');
+      console.log('🔄 LOADING PROJECTS FROM API...');
+      console.log('========================================');
+      
+      // CRITICAL: Load ALL projects without status filter
+      const apiProjects = await projectApi.getMyProjects();
+      
+      console.log('📊 RAW PROJECTS FROM API:', apiProjects.length);
+      console.log('========================================');
+      
+      // Debug: Log each project's status
+      apiProjects.forEach((p, idx) => {
+        console.log(`Project ${idx + 1}: "${p.title}"`);
+        console.log(`  - Status: ${p.status}`);
+        console.log(`  - Blockchain Status: ${p.blockchainStatus || 'not_created'}`);
+        console.log(`  - Blockchain ID: ${p.blockchainProjectId || 'none'}`);
+        console.log(`  - Funding: $${p.currentFunding} / $${p.fundingGoal}`);
+        console.log('---');
+      });
+      
+      setProjects(apiProjects);
+      
+      // Show blockchain status summary
+      const blockchainStats = {
+        created: apiProjects.filter(p => p.blockchainStatus === 'created').length,
+        failed: apiProjects.filter(p => p.blockchainStatus === 'failed').length,
+        pending: apiProjects.filter(p => p.blockchainStatus === 'pending').length,
+        notCreated: apiProjects.filter(p => !p.blockchainStatus || p.blockchainStatus === 'not_created').length,
+      };
+      
+      const statusCounts = {
+        submitted: apiProjects.filter(p => p.status === 'submitted').length,
+        underReview: apiProjects.filter(p => p.status === 'under_review').length,
+        active: apiProjects.filter(p => p.status === 'active').length,
+        funded: apiProjects.filter(p => p.status === 'funded').length,
+        rejected: apiProjects.filter(p => p.status === 'rejected').length,
+      };
+      
+      console.log('✅ Total Projects:', apiProjects.length);
+      console.log('📋 Status Breakdown:', statusCounts);
+      console.log('⛓️ Blockchain Status:', blockchainStats);
+      console.log('========================================');
+      
+      if (showRefreshToast) {
+        toast({
+          title: 'Projects Refreshed',
+          description: `Loaded ${apiProjects.length} project${apiProjects.length !== 1 ? 's' : ''}`,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+      
     } catch (error: any) {
+      console.error('❌ ERROR LOADING PROJECTS:', error);
+      console.error('Error details:', error.response?.data || error.message);
       toast({
         title: 'Error loading projects',
         description: error.message || 'Failed to load projects',
         status: 'error',
         duration: 5000,
+        isClosable: true,
       });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // Load projects on mount and when filter changes
+  // Load projects on mount
   useEffect(() => {
     loadProjects();
-  }, [filterParam]);
+    
+    // Auto-refresh every 30 seconds to catch status changes
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing projects...');
+      loadProjects(false);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []); // Only run on mount
 
   // Filter projects based on URL parameter
   const filteredProjects = useMemo(() => {
-    if (!filterParam) return projects;
+    console.log('🔍 Filtering projects with param:', filterParam);
+    console.log('🔍 Total projects before filter:', projects.length);
+    
+    if (!filterParam) {
+      console.log('✅ No filter - returning all', projects.length, 'projects');
+      return projects;
+    }
+    
+    let filtered: ApiProject[] = [];
     
     switch (filterParam) {
       case 'active':
-        return projects.filter(p => p.status === 'active');
+        filtered = projects.filter(p => p.status === ProjectStatus.ACTIVE);
+        console.log('✅ Active filter:', filtered.length, 'projects');
+        break;
       case 'completed':
-        return projects.filter(p => p.status === 'funded' || p.status === 'closed');
+        filtered = projects.filter(p => 
+          p.status === ProjectStatus.FUNDED || 
+          p.status === 'closed' as ProjectStatus
+        );
+        console.log('✅ Completed filter:', filtered.length, 'projects');
+        break;
       case 'funding':
-        return projects.filter(p => p.status === 'active');
+        filtered = projects.filter(p => p.status === ProjectStatus.ACTIVE);
+        console.log('✅ Funding filter:', filtered.length, 'projects');
+        break;
       case 'pending':
-        return projects.filter(p => p.status === 'submitted' || p.status === 'under_review');
+        filtered = projects.filter(p => 
+          p.status === ProjectStatus.SUBMITTED || 
+          p.status === ProjectStatus.UNDER_REVIEW
+        );
+        console.log('✅ Pending filter:', filtered.length, 'projects');
+        break;
       default:
-        return projects;
+        filtered = projects;
+        console.log('✅ Default - returning all', projects.length, 'projects');
     }
+    
+    return filtered;
   }, [projects, filterParam]);
 
   // Get counts for each status
   const projectCounts = useMemo(() => {
-    return {
+    const counts = {
       all: projects.length,
-      active: projects.filter(p => p.status === 'active').length,
-      completed: projects.filter(p => p.status === 'funded' || p.status === 'closed').length,
-      funding: projects.filter(p => p.status === 'active').length,
-      pending: projects.filter(p => p.status === 'submitted' || p.status === 'under_review').length,
+      active: projects.filter(p => p.status === ProjectStatus.ACTIVE).length,
+      completed: projects.filter(p => 
+        p.status === ProjectStatus.FUNDED || 
+        p.status === 'closed' as ProjectStatus
+      ).length,
+      funding: projects.filter(p => p.status === ProjectStatus.ACTIVE).length,
+      pending: projects.filter(p => 
+        p.status === ProjectStatus.SUBMITTED || 
+        p.status === ProjectStatus.UNDER_REVIEW
+      ).length,
+    };
+    
+    console.log('📊 Project Counts:', counts);
+    return counts;
+  }, [projects]);
+
+  // Get blockchain status counts
+  const blockchainCounts = useMemo(() => {
+    return {
+      onBlockchain: projects.filter(p => p.blockchainStatus === 'created').length,
+      failed: projects.filter(p => p.blockchainStatus === 'failed').length,
+      creating: projects.filter(p => p.blockchainStatus === 'pending').length,
+      notOnBlockchain: projects.filter(p => !p.blockchainStatus || p.blockchainStatus === 'not_created').length,
     };
   }, [projects]);
 
@@ -163,28 +228,39 @@ const FarmerProjectsSection: React.FC = () => {
     }
   }, [actionParam, onCreateOpen]);
 
-  const handleViewDetails = (project: FrontendProject) => {
+  const handleViewDetails = (project: ApiProject) => {
     setSelectedProject(project);
     onDetailsOpen();
   };
 
-  const handleEditProject = (project: FrontendProject) => {
+  const handleEditProject = (project: ApiProject) => {
     setSelectedProject(project);
     onEditOpen();
   };
 
-  const handleShareProject = (project: FrontendProject) => {
+  const handleShareProject = (project: ApiProject) => {
     setSelectedProject(project);
     onShareOpen();
   };
 
-  const handleSaveProject = (updatedProject: FrontendProject) => {
-    setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  const handleSaveProject = (updatedProject: ApiProject) => {
+    setProjects(projects.map(p => p._id === updatedProject._id ? updatedProject : p));
   };
 
   const handleProjectCreated = () => {
-    // Reload projects after creating a new one
     loadProjects();
+    
+    toast({
+      title: 'Project Created Successfully! 🎉',
+      description: 'Your project has been submitted and is being added to the blockchain',
+      status: 'success',
+      duration: 5000,
+      isClosable: true,
+    });
+  };
+
+  const handleRefresh = () => {
+    loadProjects(true);
   };
 
   const getFilterLabel = () => {
@@ -213,8 +289,58 @@ const FarmerProjectsSection: React.FC = () => {
       case 'pending':
       case 'submitted':
       case 'under_review': return 'yellow';
+      case 'rejected': return 'red';
       default: return 'gray';
     }
+  };
+
+  // Blockchain status summary component
+  const BlockchainStatusSummary = () => {
+    if (projects.length === 0) return null;
+    
+    return (
+      <HStack spacing={4} mt={2} fontSize="sm" flexWrap="wrap">
+        <Text color="gray.600" fontWeight="medium">Blockchain Status:</Text>
+        {blockchainCounts.onBlockchain > 0 && (
+          <Badge colorScheme="green" variant="subtle" display="flex" alignItems="center" gap={1}>
+            ⛓️ {blockchainCounts.onBlockchain} On-chain
+          </Badge>
+        )}
+        {blockchainCounts.creating > 0 && (
+          <Badge colorScheme="yellow" variant="subtle">
+            ⏳ {blockchainCounts.creating} Creating
+          </Badge>
+        )}
+        {blockchainCounts.failed > 0 && (
+          <Badge colorScheme="red" variant="subtle">
+            ❌ {blockchainCounts.failed} Failed
+          </Badge>
+        )}
+        {blockchainCounts.notOnBlockchain > 0 && (
+          <Badge colorScheme="gray" variant="subtle">
+            📝 {blockchainCounts.notOnBlockchain} Local only
+          </Badge>
+        )}
+      </HStack>
+    );
+  };
+
+  // Show warning if there are blockchain failures
+  const BlockchainFailureAlert = () => {
+    if (blockchainCounts.failed === 0) return null;
+    
+    return (
+      <Alert status="warning" borderRadius="md" mb={4}>
+        <AlertIcon />
+        <Box>
+          <AlertTitle fontSize="sm">Blockchain Creation Issues</AlertTitle>
+          <AlertDescription fontSize="xs">
+            {blockchainCounts.failed} project{blockchainCounts.failed !== 1 ? 's' : ''} failed to create on blockchain. 
+            They can still receive funding through the platform.
+          </AlertDescription>
+        </Box>
+      </Alert>
+    );
   };
 
   if (loading) {
@@ -223,7 +349,7 @@ const FarmerProjectsSection: React.FC = () => {
         <CardBody>
           <Flex justify="center" align="center" minH="400px">
             <VStack spacing={4}>
-              <Spinner size="xl" color="brand.500" thickness="4px" />
+              <Spinner size="xl" color="green.500" thickness="4px" />
               <Text color="gray.600">Loading your projects...</Text>
             </VStack>
           </Flex>
@@ -237,15 +363,19 @@ const FarmerProjectsSection: React.FC = () => {
       <Card bg={cardBg} border="1px" borderColor={borderColor} h="fit-content">
         <CardHeader>
           <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
-            <VStack align="start" spacing={1}>
+            <VStack align="start" spacing={1} flex={1}>
               <HStack spacing={3}>
-                <Heading size="md" color="brand.600">
+                <Heading size="md" color="green.600">
                   {getFilterLabel()}
                 </Heading>
-                <Badge colorScheme={getStatusColor(filterParam || 'all')} px={3} py={1}>
+                <Badge colorScheme={getStatusColor(filterParam || 'all')} px={3} py={1} fontSize="sm">
                   {filteredProjects.length} {filteredProjects.length === 1 ? 'Project' : 'Projects'}
                 </Badge>
               </HStack>
+              
+              {/* Blockchain Status Summary */}
+              <BlockchainStatusSummary />
+              
               {filterParam && (
                 <Text fontSize="sm" color="gray.600">
                   Showing {filterParam} projects only
@@ -254,6 +384,18 @@ const FarmerProjectsSection: React.FC = () => {
             </VStack>
             
             <HStack spacing={3}>
+              {/* Refresh Button */}
+              <Tooltip label="Refresh projects" hasArrow>
+                <IconButton
+                  icon={<FiRefreshCw />}
+                  onClick={handleRefresh}
+                  isLoading={refreshing}
+                  variant="outline"
+                  size="sm"
+                  aria-label="Refresh projects"
+                />
+              </Tooltip>
+
               {/* Filter Menu */}
               <Menu>
                 <MenuButton
@@ -319,11 +461,11 @@ const FarmerProjectsSection: React.FC = () => {
               {/* Create Button */}
               <Button 
                 leftIcon={<FiPlus />} 
-                colorScheme="brand" 
+                colorScheme="green" 
                 size="sm"
-                bgGradient="linear(to-r, brand.400, brand.600)"
+                bgGradient="linear(to-r, green.400, green.600)"
                 _hover={{
-                  bgGradient: "linear(to-r, brand.500, brand.700)",
+                  bgGradient: "linear(to-r, green.500, green.700)",
                   transform: "translateY(-2px)",
                   shadow: "lg"
                 }}
@@ -336,6 +478,9 @@ const FarmerProjectsSection: React.FC = () => {
         </CardHeader>
         
         <CardBody>
+          {/* Blockchain Failure Warning */}
+          <BlockchainFailureAlert />
+          
           {filteredProjects.length === 0 ? (
             <Box 
               textAlign="center" 
@@ -350,28 +495,36 @@ const FarmerProjectsSection: React.FC = () => {
                 No {filterParam ? filterParam : ''} projects found
               </Text>
               <Text fontSize="sm" color="gray.500" mb={4}>
-                {filterParam 
-                  ? `You don't have any ${filterParam} projects yet.`
-                  : 'Start by creating your first project.'
-                }
+                {projects.length > 0 ? (
+                  <>
+                    You have {projects.length} project{projects.length !== 1 ? 's' : ''} total, 
+                    but none match the "{filterParam}" filter.
+                  </>
+                ) : (
+                  'Start by creating your first project and get government approval to receive funding.'
+                )}
               </Text>
-              <Button
-                leftIcon={<FiPlus />}
-                colorScheme="brand"
-                onClick={onCreateOpen}
-              >
-                Create Your First Project
-              </Button>
+              {projects.length === 0 && (
+                <Button
+                  leftIcon={<FiPlus />}
+                  colorScheme="green"
+                  onClick={onCreateOpen}
+                  size="lg"
+                >
+                  Create Your First Project
+                </Button>
+              )}
             </Box>
           ) : (
             <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
               {filteredProjects.map((project) => (
                 <ProjectCard 
-                  key={project.id} 
+                  key={project._id} 
                   project={project} 
                   onViewDetails={handleViewDetails}
                   onEdit={handleEditProject}
                   onShare={handleShareProject}
+                  showBlockchainInfo={true}
                 />
               ))}
             </SimpleGrid>

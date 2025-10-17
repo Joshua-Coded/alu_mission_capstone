@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FiSave, FiUpload, FiX } from "react-icons/fi";
-import { UpdateProjectDto, projectApi } from "../../../lib/projectApi";
+import { Project as ApiProject, UpdateProjectDto, projectApi } from "../../../lib/projectApi";
 
 // components/dashboard/farmer/EditProjectModal.tsx
 
@@ -33,27 +33,11 @@ import {
   Spinner,
 } from '@chakra-ui/react';
 
-interface Project {
-  id: string;
-  name: string;
-  progress: number;
-  funding: string;
-  fundingGoal: string;
-  investors: number;
-  phase: string;
-  roi: string;
-  status: string;
-  description: string;
-  expectedHarvest: string;
-  location: string;
-  images?: string[];
-}
-
 interface EditProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: Project | null;
-  onSave: (project: Project) => void;
+  project: ApiProject | null; 
+  onSave: (project: ApiProject) => void; 
 }
 
 export const EditProjectModal: React.FC<EditProjectModalProps> = ({
@@ -77,19 +61,21 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [fullProjectData, setFullProjectData] = useState<any>(null);
+  const [fullProjectData, setFullProjectData] = useState<ApiProject | null>(null);
   
   const toast = useToast();
 
   const categories = [
-    'Crops',
-    'Livestock',
-    'Equipment',
-    'Infrastructure',
-    'Processing',
-    'Storage',
-    'Irrigation',
-    'Seeds & Fertilizer',
+    'POULTRY_FARMING',
+    'CROP_PRODUCTION', 
+    'LIVESTOCK_FARMING',
+    'FISH_FARMING',
+    'VEGETABLE_FARMING',
+    'FRUIT_FARMING',
+    'AGRO_PROCESSING',
+    'SUSTAINABLE_AGRICULTURE',
+    'ORGANIC_FARMING',
+    'GENERAL_AGRICULTURE'
   ];
 
   const locations = [
@@ -103,10 +89,10 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   // Fetch full project data when project changes
   useEffect(() => {
     const fetchProjectDetails = async () => {
-      if (project?.id && isOpen) {
+      if (project?._id && isOpen) { // FIXED: Use _id instead of id
         setIsLoading(true);
         try {
-          const fullProject = await projectApi.getProjectById(project.id);
+          const fullProject = await projectApi.getProjectById(project._id); // FIXED: Use _id
           setFullProjectData(fullProject);
           
           // Set form data from full project
@@ -136,7 +122,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     };
 
     fetchProjectDetails();
-  }, [project?.id, isOpen]);
+  }, [project?._id, isOpen]); // FIXED: Use _id instead of id
 
   // Reset form when modal closes
   useEffect(() => {
@@ -151,7 +137,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   if (!project) return null;
 
   // Check if project can be edited
-  const canEdit = project.status === 'draft' || project.status === 'submitted';
+  const canEdit = project.status === 'submitted' || project.status === 'under_review';
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -244,8 +230,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         images: allImages.length > 0 ? allImages : undefined,
       };
 
-      // Update project via API
-      const updatedProject = await projectApi.updateProject(project.id, updateData);
+      // Update project via API - FIXED: Use _id
+      const updatedProject = await projectApi.updateProject(project._id, updateData);
       
       toast({
         title: "Project Updated",
@@ -255,18 +241,8 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         isClosable: true,
       });
 
-      // Update local project data
-      const updatedLocalProject: Project = {
-        ...project,
-        name: updatedProject.title,
-        description: updatedProject.description,
-        fundingGoal: `$${updatedProject.fundingGoal.toLocaleString()}`,
-        expectedHarvest: updatedProject.timeline,
-        location: updatedProject.location,
-        images: updatedProject.images,
-      };
-
-      onSave(updatedLocalProject);
+      // Call onSave with the updated ApiProject
+      onSave(updatedProject);
       onClose();
     } catch (error: any) {
       console.error('Update error:', error);
@@ -296,7 +272,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
               </Badge>
             </HStack>
             <Text fontSize="sm" color="gray.600" fontWeight="normal">
-              {project.name}
+              {project.title} {/* FIXED: Use title instead of name */}
             </Text>
           </VStack>
         </ModalHeader>
@@ -314,7 +290,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
               <Box>
                 <AlertTitle>Project Cannot Be Edited</AlertTitle>
                 <AlertDescription>
-                  Projects can only be edited when they are in draft or submitted status.
+                  Projects can only be edited when they are in submitted or under review status.
                   This project is currently {project.status}.
                 </AlertDescription>
               </Box>
@@ -350,7 +326,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
                   placeholder="Select category"
                 >
                   {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                    <option key={cat} value={cat}>{cat.replace(/_/g, ' ')}</option>
                   ))}
                 </Select>
               </FormControl>

@@ -23,40 +23,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated = !!user && !!token;
 
-  // Load user from localStorage on app start
-  useEffect(() => {
-    const savedToken = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('auth_user');
-        
-    if (savedToken && savedUser) {
-      try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error('Error loading auth data:', error);
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('auth_user');
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
   const login = async (data: LoginData) => {
     try {
       const response = await api.login(data);
-        
-      setToken(response.access_token);
-      setUser(response.user);
-        
-      localStorage.setItem('authToken', response.access_token);
-      localStorage.setItem('auth_user', JSON.stringify(response.user));
       
-      console.log('✅ Login successful, token stored');
+      // Store token first
+      setToken(response.access_token);
+      localStorage.setItem('authToken', response.access_token);
+      
+      // Use the updated getProfile (no token parameter needed)
+      const profile = await api.getProfile();
+      
+      // Merge user data safely without permissions field
+      const fullUser = { 
+        ...response.user, 
+        ...profile,
+        // Remove permissions if it doesn't exist in profile
+        permissions: undefined 
+      };
+      setUser(fullUser);
+      localStorage.setItem('auth_user', JSON.stringify(fullUser));
+      
+      console.log('✅ Login successful with full profile:', {
+        id: fullUser.id,
+        role: fullUser.role,
+        roles: fullUser.roles,
+        emailVerified: fullUser.emailVerified
+      });
+      
+      // Validate government access
+      if (fullUser.role === 'GOVERNMENT_OFFICIAL' || 
+          (fullUser.roles && fullUser.roles.includes('GOVERNMENT_OFFICIAL'))) {
+        console.log('✅ Government official access confirmed');
+      } else {
+        console.warn('⚠️ User is not a government official:', fullUser.role);
+      }
+      
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   };
+
+  // Update the init function
+  useEffect(() => {
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem('authToken');
+      const savedUser = localStorage.getItem('auth_user');
+      
+      if (savedToken && savedUser) {
+        try {
+          setToken(savedToken);
+          
+          // Use the updated getProfile
+          const profile = await api.getProfile();
+          // Merge user data safely without permissions field
+          const fullUser = { 
+            ...JSON.parse(savedUser), 
+            ...profile,
+            permissions: undefined 
+          };
+          setUser(fullUser);
+          localStorage.setItem('auth_user', JSON.stringify(fullUser));
+          
+          console.log('✅ Auth restored with refreshed profile:', fullUser);
+        } catch (error) {
+          console.error('Profile refresh failed, clearing auth:', error);
+          logout();
+        }
+      }
+      setIsLoading(false);
+    };
+    
+    initAuth();
+  }, []);
 
   const register = async (data: RegisterData) => {
     try {

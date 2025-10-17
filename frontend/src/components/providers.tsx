@@ -3,13 +3,10 @@ import "@rainbow-me/rainbowkit/styles.css";
 import { ChakraProvider, extendTheme } from "@chakra-ui/react";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { WagmiProvider } from "wagmi";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { config } from "@/lib/wagmi";
-
-/* eslint-disable */
-
-
 
 const theme = extendTheme({
   colors: {
@@ -28,9 +25,17 @@ const theme = extendTheme({
   },
 });
 
-const queryClient = new QueryClient();
-
 export function Providers({ children }: { children: React.ReactNode }) {
+  // ✅ Create QueryClient only once
+  const queryClient = useMemo(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        retry: 1,
+      },
+    },
+  }), []);
+
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>

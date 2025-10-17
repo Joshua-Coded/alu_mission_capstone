@@ -1,18 +1,15 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 
-// api/projectApi.ts
-
 // ==================== TYPES & INTERFACES ====================
 
 export enum UserRole {
-  FARMER = 'farmer',
-  GOVERNMENT = 'government',
-  CONTRIBUTOR = 'contributor',
+  FARMER = 'FARMER', 
+  GOVERNMENT_OFFICIAL = 'GOVERNMENT_OFFICIAL', 
+  CONTRIBUTOR = 'CONTRIBUTOR',
 }
 
 export enum ProjectStatus {
-  DRAFT = 'draft',
-  SUBMITTED = 'submitted',
+  SUBMITTED = 'submitted', 
   UNDER_REVIEW = 'under_review',
   ACTIVE = 'active',
   REJECTED = 'rejected',
@@ -20,14 +17,57 @@ export enum ProjectStatus {
   CLOSED = 'closed',
 }
 
+export enum GovernmentDepartment {
+  POULTRY = 'POULTRY',
+  CROPS = 'CROPS',
+  LIVESTOCK = 'LIVESTOCK',
+  FISHERIES = 'FISHERIES',
+  HORTICULTURE = 'HORTICULTURE',
+  AGRIBUSINESS = 'AGRIBUSINESS',
+  SUSTAINABILITY = 'SUSTAINABILITY',
+  COMPLIANCE = 'COMPLIANCE',
+  GENERAL = 'GENERAL'
+}
+
+export enum ProjectCategory {
+  POULTRY_FARMING = 'POULTRY_FARMING',
+  CROP_PRODUCTION = 'CROP_PRODUCTION',
+  LIVESTOCK_FARMING = 'LIVESTOCK_FARMING',
+  FISH_FARMING = 'FISH_FARMING',
+  VEGETABLE_FARMING = 'VEGETABLE_FARMING',
+  FRUIT_FARMING = 'FRUIT_FARMING',
+  AGRO_PROCESSING = 'AGRO_PROCESSING',
+  SUSTAINABLE_AGRICULTURE = 'SUSTAINABLE_AGRICULTURE',
+  ORGANIC_FARMING = 'ORGANIC_FARMING',
+  GENERAL_AGRICULTURE = 'GENERAL_AGRICULTURE'
+}
+
+// ✅ PROPER DOCUMENT TYPES
+export interface ProjectDocument {
+  name: string;
+  url: string;
+  documentType?: string;
+  uploadedAt?: Date | string;
+}
+
+export interface DueDiligenceDocument {
+  name: string;
+  url: string;
+  uploadedAt: Date | string;
+}
+
 export interface User {
+  walletAddress?: string;
   _id: string;
+  id?: string;
   firstName: string;
   lastName: string;
   email: string;
   phoneNumber?: string;
   location?: string;
   profileImage?: string;
+  department?: GovernmentDepartment;
+  role?: UserRole;
 }
 
 export interface DueDiligence {
@@ -36,11 +76,7 @@ export interface DueDiligence {
   startedAt?: Date;
   completedAt?: Date;
   notes: string;
-  documents: Array<{
-    name: string;
-    url: string;
-    uploadedAt: Date;
-  }>;
+  documents: DueDiligenceDocument[];
 }
 
 export interface Verification {
@@ -55,23 +91,44 @@ export interface Project {
   projectId: string;
   title: string;
   description: string;
-  category: string;
+  category: string; 
   fundingGoal: number;
   currentFunding: number;
-  timeline: string;
+  timeline: string; 
   location: string;
   images: string[];
-  documents: Array<{
-    name: string;
-    url: string;
-  }>;
+  documents: ProjectDocument[];
   farmer: User | string;
   status: ProjectStatus;
   contributorsCount: number;
-  dueDiligence: DueDiligence;
-  verification: Verification;
+  dueDiligence: DueDiligence; 
+  verification: Verification; 
   createdAt: Date;
   updatedAt: Date;
+  department?: GovernmentDepartment;
+  submittedAt?: Date;
+  
+  // Blockchain fields
+  blockchainProjectId?: number;
+  blockchainStatus?: 'not_created' | 'pending' | 'created' | 'failed';
+  blockchainTxHash?: string;
+  blockchainCreatedAt?: Date;
+  isBlockchainFunded?: boolean;
+  blockchainFundedAt?: Date;
+}
+
+export interface DepartmentProjectsResponse {
+  department: GovernmentDepartment;
+  totalProjects: number;
+  projects: Project[];
+  message: string;
+}
+
+export interface DepartmentRecommendations {
+  recommendedDepartment: GovernmentDepartment;
+  projectCategory: ProjectCategory;
+  message: string;
+  departmentOfficials: any[];
 }
 
 export interface CreateProjectDto {
@@ -82,10 +139,7 @@ export interface CreateProjectDto {
   timeline: string;
   location: string;
   images: string[];
-  documents: Array<{
-    name: string;
-    url: string;
-  }>;
+  documents: ProjectDocument[];
 }
 
 export interface UpdateProjectDto {
@@ -96,19 +150,21 @@ export interface UpdateProjectDto {
   timeline?: string;
   location?: string;
   images?: string[];
-  documents?: Array<{
-    name: string;
-    url: string;
-  }>;
+  documents?: ProjectDocument[];
 }
 
 export interface UpdateDueDiligenceDto {
   notes?: string;
   status?: 'pending' | 'in_progress' | 'completed';
-  documents?: Array<{
-    name: string;
-    url: string;
-  }>;
+  documents?: DueDiligenceDocument[];
+}
+
+export interface VerifyProjectDto {
+  notes?: string;
+}
+
+export interface RejectProjectDto {
+  reason: string;
 }
 
 export interface PlatformStats {
@@ -117,6 +173,8 @@ export interface PlatformStats {
   fundedProjects: number;
   totalFunding: number;
   pendingReview: number;
+  rejectedProjects: number;
+  averageProcessingTime: string;
 }
 
 export interface UploadResponse {
@@ -138,6 +196,24 @@ export interface ApiError {
   error?: string;
 }
 
+export interface BlockchainProjectStatus {
+  blockchainEnabled: boolean;
+  projectId?: number;
+  isCompleted?: boolean;
+  isFunded?: boolean;
+  totalFunding?: string;
+  fundingGoal?: string;
+  canComplete?: boolean;
+  localFunding?: number;
+  localStatus?: ProjectStatus;
+  message?: string;
+  error?: string;
+}
+
+export interface BlockchainCompletionResponse {
+  txHash: string;
+}
+
 // ==================== API CLIENT ====================
 
 class ProjectApiClient {
@@ -148,13 +224,12 @@ class ProjectApiClient {
     this.baseURL = baseURL;
     this.api = axios.create({
       baseURL: this.baseURL,
-      timeout: 30000, // 30 seconds timeout
+      timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    // Request interceptor to add auth token
     this.api.interceptors.request.use(
       (config) => {
         const token = this.getToken();
@@ -163,108 +238,115 @@ class ProjectApiClient {
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        return Promise.reject(error);
+      }
     );
 
-    // Response interceptor for better error handling
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        return response;
+      },
       (error: AxiosError<ApiError>) => {
         if (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
-          console.error('Network error - API server may be down');
           return Promise.reject(new Error('Unable to connect to server. Please check if the API server is running.'));
         }
         
-        const errorMessage = error.response?.data?.message || error.message;
-        console.error('API Error:', errorMessage);
-        
-        // Handle specific HTTP status codes
         if (error.response?.status === 401) {
           this.clearToken();
-          window.location.href = '/login';
         }
-        
-        return Promise.reject(error.response?.data || error);
+
+        const errorMessage = error.response?.data?.message || error.message || 'Unknown error occurred';
+        return Promise.reject(new Error(errorMessage));
       }
     );
   }
 
-  // Token management
-  setToken(token: string): void {
-    localStorage.setItem('authToken', token);
+  private getToken(): string | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    try {
+      return localStorage.getItem('authToken');
+    } catch (error) {
+      return null;
+    }
   }
 
-  getToken(): string | null {
-    return localStorage.getItem('authToken');
+  setToken(token: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('authToken', token);
+    } catch (error) {
+      console.error('Error storing token:', error);
+    }
   }
 
   clearToken(): void {
-    localStorage.removeItem('authToken');
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem('authToken');
+    } catch (error) {
+      console.error('Error clearing token:', error);
+    }
   }
 
   // ==================== FARMER ENDPOINTS ====================
 
-  // Create a new project
   async createProject(data: CreateProjectDto): Promise<Project> {
     const response = await this.api.post<Project>('/projects', data);
     return response.data;
   }
 
-  // Get farmer's projects
-  async getMyProjects(status?: ProjectStatus): Promise<Project[]> {
+  async getMyProjects(status?: string): Promise<Project[]> {
     const params = status ? { status } : {};
     const response = await this.api.get<Project[]>('/projects/my-projects', { params });
     return response.data;
   }
 
-  // Update project (draft/submitted only)
   async updateProject(id: string, data: UpdateProjectDto): Promise<Project> {
     const response = await this.api.patch<Project>(`/projects/${id}`, data);
     return response.data;
   }
 
-  // Delete project (draft only)
   async deleteProject(id: string): Promise<{ message: string }> {
     const response = await this.api.delete<{ message: string }>(`/projects/${id}`);
     return response.data;
   }
 
-  // Submit project for review
-  async submitProject(id: string): Promise<Project> {
-    const response = await this.api.post<Project>(`/projects/${id}/submit`);
+  // ==================== GOVERNMENT ENDPOINTS ====================
+
+  async getAllProjects(): Promise<Project[]> {
+    const response = await this.api.get<Project[]>('/projects');
     return response.data;
   }
 
-  // ==================== GOVERNMENT ENDPOINTS ====================
+  async getAllProjectsForGovernment(): Promise<Project[]> {
+    const response = await this.api.get<Project[]>('/projects/government/dashboard');
+    return response.data;
+  }
 
-  // Get projects pending review
+  async getProjectsByDepartment(department: GovernmentDepartment): Promise<DepartmentProjectsResponse> {
+    const response = await this.api.get<DepartmentProjectsResponse>(`/projects/department/${department}`);
+    return response.data;
+  }
+
+  async getMyDepartmentProjects(): Promise<DepartmentProjectsResponse> {
+    const response = await this.api.get<DepartmentProjectsResponse>('/projects/my-department');
+    return response.data;
+  }
+
+  async getDepartmentRecommendations(category: ProjectCategory): Promise<DepartmentRecommendations> {
+    const response = await this.api.get<DepartmentRecommendations>(`/projects/department-recommendations/${category}`);
+    return response.data;
+  }
+
   async getPendingProjects(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/pending/review');
     return response.data;
   }
 
-  // Get assigned projects
-  async getMyAssignedProjects(): Promise<Project[]> {
-    const response = await this.api.get<Project[]>('/projects/my-assigned');
-    return response.data;
-  }
-
-  // Assign project for due diligence
-  async assignDueDiligence(
-    projectId: string,
-    governmentOfficialId: string
-  ): Promise<Project> {
-    const response = await this.api.post<Project>(`/projects/${projectId}/assign`, {
-      governmentOfficialId,
-    });
-    return response.data;
-  }
-
-  // Update due diligence
-  async updateDueDiligence(
-    projectId: string,
-    data: UpdateDueDiligenceDto
-  ): Promise<Project> {
+  async updateDueDiligence(projectId: string, data: UpdateDueDiligenceDto): Promise<Project> {
     const response = await this.api.patch<Project>(
       `/projects/${projectId}/due-diligence`,
       data
@@ -272,7 +354,6 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // Verify project
   async verifyProject(projectId: string, notes?: string): Promise<Project> {
     const response = await this.api.post<Project>(`/projects/${projectId}/verify`, {
       notes,
@@ -280,7 +361,6 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // Reject project
   async rejectProject(projectId: string, reason: string): Promise<Project> {
     const response = await this.api.post<Project>(`/projects/${projectId}/reject`, {
       reason,
@@ -290,7 +370,6 @@ class ProjectApiClient {
 
   // ==================== CONTRIBUTOR ENDPOINTS ====================
 
-  // Get verified/active projects
   async getVerifiedProjects(category?: string, location?: string): Promise<Project[]> {
     const params: any = {};
     if (category) params.category = category;
@@ -302,7 +381,6 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // Add project to favorites
   async addToFavorites(projectId: string): Promise<{ message: string }> {
     const response = await this.api.post<{ message: string }>(
       `/projects/${projectId}/favorite`
@@ -310,7 +388,6 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // Remove project from favorites
   async removeFromFavorites(projectId: string): Promise<{ message: string }> {
     const response = await this.api.delete<{ message: string }>(
       `/projects/${projectId}/favorite`
@@ -318,13 +395,11 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // Get favorite projects
   async getFavorites(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/favorites');
     return response.data;
   }
 
-  // Check if project is favorited
   async isFavorite(projectId: string): Promise<{ isFavorite: boolean }> {
     const response = await this.api.get<{ isFavorite: boolean }>(
       `/projects/${projectId}/is-favorite`
@@ -334,205 +409,135 @@ class ProjectApiClient {
 
   // ==================== SHARED ENDPOINTS ====================
 
-  // Get single project by ID
   async getProjectById(id: string): Promise<Project> {
     const response = await this.api.get<Project>(`/projects/${id}`);
     return response.data;
   }
 
-  // Get platform statistics
   async getPlatformStats(): Promise<PlatformStats> {
     const response = await this.api.get<PlatformStats>('/projects/stats/dashboard');
     return response.data;
   }
 
-  // ==================== UPLOAD ENDPOINTS - FIXED VERSION ====================
+  // ==================== UPLOAD ENDPOINTS ====================
 
-  // Upload single image - WITH PROPER VALIDATION
   async uploadImage(file: File): Promise<UploadResponse> {
-    // Validate file type before upload - STRICT VALIDATION
-    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedImageTypes.includes(file.type)) {
-      throw new Error('Only image files (JPEG, PNG, WEBP) are allowed');
-    }
-
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error('Image size must be less than 5MB');
-    }
-
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
-      const response = await this.api.post<UploadResponse>('/upload/image', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 60000, // 60 seconds for uploads
-      });
-      return response.data;
-    } catch (error: any) {
-      console.error('Upload image error:', error);
-      // Provide more specific error messages
-      if (error.response?.status === 400) {
-        throw new Error('Invalid file type or format. Please use JPEG, PNG, or WEBP images only.');
-      } else if (error.response?.status === 413) {
-        throw new Error('File too large. Please select an image smaller than 5MB.');
-      } else {
-        throw new Error(error.message || 'Failed to upload image. Please try again.');
-      }
-    }
+    const response = await this.api.post<UploadResponse>('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   }
 
-  // Upload multiple images - WITH BATCH VALIDATION
   async uploadMultipleImages(files: File[]): Promise<MultiUploadResponse> {
-    // Validate all files first
-    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    const maxFiles = 10;
-    
-    if (files.length > maxFiles) {
-      throw new Error(`Maximum ${maxFiles} images allowed per upload`);
-    }
-    
-    for (const file of files) {
-      if (!allowedImageTypes.includes(file.type)) {
-        throw new Error(`Invalid file type: ${file.name}. Only JPEG, PNG, WEBP allowed.`);
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        throw new Error(`File too large: ${file.name}. Maximum size is 5MB.`);
-      }
-    }
-
     const formData = new FormData();
     files.forEach((file) => {
       formData.append('files', file);
     });
 
-    try {
-      const response = await this.api.post<MultiUploadResponse>(
-        '/upload/images',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          timeout: 120000, // 2 minutes for multiple files
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-              console.log(`Upload Progress: ${percentCompleted}%`);
-            }
-          },
-        }
-      );
-      return response.data;
-    } catch (error: any) {
-      console.error('Upload multiple images error:', error);
-      if (error.response?.status === 400) {
-        throw new Error('One or more files are invalid. Please check file types and sizes.');
-      } else if (error.response?.status === 413) {
-        throw new Error('Total file size too large. Please reduce the number or size of files.');
-      } else {
-        throw new Error(error.message || 'Failed to upload images. Please try again.');
-      }
-    }
-  }
-
-  // Upload document - WITH PROPER VALIDATION
-  async uploadDocument(file: File): Promise<UploadResponse> {
-    // Validate document types
-    const allowedDocTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
-    if (!allowedDocTypes.includes(file.type)) {
-      throw new Error('Only PDF and Word documents are allowed');
-    }
-
-    // Validate file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error('Document size must be less than 10MB');
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await this.api.post<UploadResponse>('/upload/document', formData, {
+    const response = await this.api.post<MultiUploadResponse>(
+      '/upload/images',
+      formData,
+      {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 60000,
-      });
-      return response.data;
-    } catch (error: any) {
-      console.error('Upload document error:', error);
-      if (error.response?.status === 400) {
-        throw new Error('Invalid document format. Please use PDF or Word documents only.');
-      } else if (error.response?.status === 413) {
-        throw new Error('Document too large. Please select a file smaller than 10MB.');
-      } else {
-        throw new Error(error.message || 'Failed to upload document. Please try again.');
       }
-    }
+    );
+    return response.data;
   }
 
-  // ==================== HEALTH CHECK ====================
+  async uploadDocument(file: File): Promise<UploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
 
-  // Check if API server is reachable
-  async healthCheck(): Promise<{ status: string; timestamp: string }> {
-    try {
-      const response = await this.api.get<{ status: string; timestamp: string }>('/health');
-      return response.data;
-    } catch (error) {
-      throw new Error('API server is not reachable. Please check if the backend is running.');
-    }
+    const response = await this.api.post<UploadResponse>('/upload/document', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   }
 
-  // ==================== FILE VALIDATION HELPERS ====================
+  // ==================== DEBUG ENDPOINTS ====================
 
-  // Helper to validate image files before upload
-  validateImageFile(file: File): { isValid: boolean; error?: string } {
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
-
-    if (!allowedTypes.includes(file.type)) {
-      return { isValid: false, error: 'Only JPEG, PNG, or WEBP images are allowed' };
-    }
-
-    if (file.size > maxSize) {
-      return { isValid: false, error: 'Image must be smaller than 5MB' };
-    }
-
-    return { isValid: true };
+  async debugUserInfo(): Promise<any> {
+    const response = await this.api.get('/projects/debug/user-info');
+    return response.data;
   }
 
-  // Helper to validate document files before upload
-  validateDocumentFile(file: File): { isValid: boolean; error?: string } {
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    const maxSize = 10 * 1024 * 1024; // 10MB
+  // ==================== BLOCKCHAIN METHODS ====================
 
-    if (!allowedTypes.includes(file.type)) {
-      return { isValid: false, error: 'Only PDF and Word documents are allowed' };
-    }
-
-    if (file.size > maxSize) {
-      return { isValid: false, error: 'Document must be smaller than 10MB' };
-    }
-
-    return { isValid: true };
+  isAuthenticated(): boolean {
+    return !!this.getToken();
   }
+
+  async getBlockchainStatus(projectId: string): Promise<BlockchainProjectStatus> {
+    const response = await this.api.get<BlockchainProjectStatus>(
+      `/projects/${projectId}/blockchain-status`
+    );
+    return response.data;
+  }
+
+  async completeProjectOnBlockchain(projectId: string): Promise<BlockchainCompletionResponse> {
+    const response = await this.api.post<BlockchainCompletionResponse>(
+      `/projects/${projectId}/complete-blockchain`
+    );
+    return response.data;
+  }
+
+  async checkAndUpdateProjectCompletion(projectId: string): Promise<Project> {
+    const response = await this.api.post<Project>(
+      `/projects/${projectId}/check-completion`
+    );
+    return response.data;
+  }
+
+  async syncBlockchainStatus(projectId: string): Promise<{ message: string }> {
+    const response = await this.api.post<{ message: string }>(
+      `/projects/${projectId}/sync-blockchain`
+    );
+    return response.data;
+  }
+
+  async createProjectWithBlockchain(data: CreateProjectDto): Promise<Project & { blockchainStatus: string }> {
+    const response = await this.api.post<Project & { blockchainStatus: string }>('/projects', data);
+    return response.data;
+  }
+}
+
+// ==================== UTILITY TYPES ====================
+
+export interface ProjectWithBlockchain extends Project {
+  blockchainProjectId: number;
+  blockchainStatus: 'not_created' | 'pending' | 'created' | 'failed';
+  blockchainTxHash?: string;
+  blockchainCreatedAt?: Date;
+  isBlockchainFunded?: boolean;
+  blockchainFundedAt?: Date;
+}
+
+export interface BlockchainTransaction {
+  txHash: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  blockNumber?: number;
+  timestamp?: Date;
+  gasUsed?: number;
+}
+
+export interface FundingProgress {
+  currentFunding: number;
+  fundingGoal: number;
+  progressPercentage: number;
+  blockchainFunding?: string;
+  isFullyFunded: boolean;
 }
 
 // Export singleton instance
 export const projectApi = new ProjectApiClient();
 
-// Export class for custom instances if needed
 export default ProjectApiClient;

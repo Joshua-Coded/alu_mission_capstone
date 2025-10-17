@@ -1,9 +1,8 @@
 "use client";
 import ApprovalActionModal from "@/components/dashboard/government/ApprovalActionModal";
-import ApprovalWorkflowTracker from "@/components/dashboard/government/ApprovalWorkflowTracker";
 import DashboardHeader from "@/components/dashboard/government/DashboardHeader";
-import DueDiligencePanel from "@/components/dashboard/government/DueDiligencePanel";
 import GovDashboardStats from "@/components/dashboard/government/GovDashboardStats";
+import GovernmentProjectDetailsModal from "@/components/dashboard/government/ProjectDetailsModal";
 import ProjectsTable from "@/components/dashboard/government/ProjectsTable";
 import RejectProjectModal from "@/components/dashboard/government/RejectProjectModal";
 import RevisionRequestModal from "@/components/dashboard/government/RevisionRequestModal";
@@ -12,470 +11,382 @@ import WalletConnectionGuard from "@/components/WalletConnectionGuard";
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
+import { Project as ApiProject, projectApi } from "@/lib/projectApi";
 
-// ============================================
-// FILE: app/government/dashboard/page.tsx
-// Main Government Dashboard - Complete Project Approval System
-// ============================================
 import {
   Box,
   Container,
   VStack,
   useDisclosure,
-  Drawer,
-  DrawerBody,
-  DrawerHeader,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
+  Text,
+  Badge,
+  HStack,
+  useToast,
+  Spinner,
+  Alert,
+  AlertIcon,
+  Button,
   Tabs,
   TabList,
   TabPanels,
   Tab,
   TabPanel,
-  Text,
-  Badge,
-  HStack,
+  Icon,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  Select,
 } from '@chakra-ui/react';
-
-// Import all components
-
-import { 
-  Project, 
-  ProjectStatus, 
-  ApprovalStep,
-  ProjectDocument,
-  ApprovalHistory,
-  DueDiligenceCheck,
-  AssignedOfficer,
-  ProjectComment
-} from '@/types/government.types';
+import {
+  FiRefreshCw,
+  FiSearch,
+  FiFilter,
+  FiCheckCircle,
+  FiClock,
+  FiXCircle,
+  FiAlertCircle,
+} from 'react-icons/fi';
 
 export default function GovernmentDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const { address } = useAccount();
+  const toast = useToast();
 
-  // Drawer and Modal states
-  const { isOpen: isDrawerOpen, onOpen: onDrawerOpen, onClose: onDrawerClose } = useDisclosure();
+  // Modal states
   const { isOpen: isApproveOpen, onOpen: onApproveOpen, onClose: onApproveClose } = useDisclosure();
   const { isOpen: isRejectOpen, onOpen: onRejectOpen, onClose: onRejectClose } = useDisclosure();
   const { isOpen: isRevisionOpen, onOpen: onRevisionOpen, onClose: onRevisionClose } = useDisclosure();
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [allProjects, setAllProjects] = useState<ApiProject[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<ApiProject[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ApiProject | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string>('');
+  const [activeTab, setActiveTab] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  // Mock data - Replace with actual API calls
   useEffect(() => {
-    // Simulate fetching projects from API
-    const mockProjects: Project[] = [
-      {
-        id: '1',
-        projectName: 'Organic Tomato Farm 2024',
-        farmerName: 'Sarah Johnson',
-        farmerEmail: 'sarah.johnson@example.com',
-        farmerId: 'F-2024-001',
-        location: 'Kigali Village',
-        district: 'Kigali District',
-        fundingRequested: 10000,
-        projectType: 'Crop Farming',
-        description: 'A comprehensive organic tomato farming project focusing on sustainable practices and high-yield production using modern greenhouse technology.',
-        duration: 12,
-        expectedYield: '5 tons per season',
-        expectedROI: '35% annually',
-        status: ProjectStatus.SUBMITTED,
-        currentApprovalStep: ApprovalStep.STEP_1_INITIAL_REVIEW,
-        priority: 'HIGH',
-        submittedAt: new Date('2024-10-01'),
-        updatedAt: new Date(),
-        dueDate: new Date('2024-10-15'),
-        documents: [
-          {
-            id: 'd1',
-            name: 'Land Certificate',
-            type: 'PDF',
-            category: 'LAND_DOCUMENTS',
-            url: '/docs/land-cert.pdf',
-            size: '2.4 MB',
-            uploadedAt: new Date('2024-10-01'),
-            verified: false,
-          },
-          {
-            id: 'd2',
-            name: 'Business Plan',
-            type: 'PDF',
-            category: 'BUSINESS_PLAN',
-            url: '/docs/business-plan.pdf',
-            size: '5.1 MB',
-            uploadedAt: new Date('2024-10-01'),
-            verified: false,
-          },
-        ],
-        approvalHistory: [],
-        dueDiligenceChecks: [
-          {
-            id: 'dd1',
-            category: 'DOCUMENTATION',
-            checkName: 'Verify Land Ownership Documents',
-            status: 'PENDING',
-            assignedTo: 'John Doe',
-            findings: '',
-            recommendation: 'APPROVE',
-            score: 0,
-          },
-          {
-            id: 'dd2',
-            category: 'DOCUMENTATION',
-            checkName: 'Review Business Plan Completeness',
-            status: 'PENDING',
-            assignedTo: 'John Doe',
-            findings: '',
-            recommendation: 'APPROVE',
-            score: 0,
-          },
-          {
-            id: 'dd3',
-            category: 'FINANCIAL',
-            checkName: 'Financial Viability Assessment',
-            status: 'PENDING',
-            assignedTo: 'Jane Smith',
-            findings: '',
-            recommendation: 'APPROVE',
-            score: 0,
-          },
-        ],
-        assignedOfficers: [
-          {
-            id: 'ao1',
-            officerId: 'O001',
-            officerName: 'John Doe',
-            role: 'REVIEWER',
-            department: 'Documentation',
-            assignedAt: new Date('2024-10-01'),
-            taskStatus: 'IN_PROGRESS',
-          },
-        ],
-        comments: [],
-        riskScore: 25,
-        complianceScore: 0,
-      },
-      {
-        id: '2',
-        projectName: 'Sustainable Corn Farming',
-        farmerName: 'Mike Chen',
-        farmerEmail: 'mike.chen@example.com',
-        farmerId: 'F-2024-002',
-        location: 'Gasabo Town',
-        district: 'Gasabo District',
-        fundingRequested: 25000,
-        projectType: 'Crop Farming',
-        description: 'Large-scale corn production using sustainable farming methods with drip irrigation system.',
-        duration: 18,
-        expectedYield: '15 tons per harvest',
-        expectedROI: '42% annually',
-        status: ProjectStatus.UNDER_REVIEW,
-        currentApprovalStep: ApprovalStep.STEP_3_LAND_VERIFICATION,
-        priority: 'MEDIUM',
-        submittedAt: new Date('2024-09-25'),
-        updatedAt: new Date(),
-        dueDate: new Date('2024-10-20'),
-        documents: [],
-        approvalHistory: [
-          {
-            id: 'ah1',
-            step: ApprovalStep.STEP_1_INITIAL_REVIEW,
-            action: 'MOVED_TO_NEXT_STEP',
-            comment: 'Initial review completed successfully. All basic requirements met.',
-            officerId: 'O001',
-            officerName: 'John Doe',
-            officerRole: 'Reviewer',
-            timestamp: new Date('2024-09-26'),
-          },
-          {
-            id: 'ah2',
-            step: ApprovalStep.STEP_2_DOCUMENTATION,
-            action: 'MOVED_TO_NEXT_STEP',
-            comment: 'All documents verified and in order.',
-            officerId: 'O001',
-            officerName: 'John Doe',
-            officerRole: 'Reviewer',
-            timestamp: new Date('2024-09-28'),
-          },
-        ],
-        dueDiligenceChecks: [
-          {
-            id: 'dd4',
-            category: 'LEGAL',
-            checkName: 'Land Title Verification',
-            status: 'IN_PROGRESS',
-            assignedTo: 'Legal Team',
-            findings: '',
-            recommendation: 'APPROVE',
-            score: 0,
-          },
-        ],
-        assignedOfficers: [
-          {
-            id: 'ao2',
-            officerId: 'O002',
-            officerName: 'Jane Smith',
-            role: 'INSPECTOR',
-            department: 'Land Verification',
-            assignedAt: new Date('2024-09-28'),
-            taskStatus: 'IN_PROGRESS',
-          },
-          {
-            id: 'ao3',
-            officerId: 'O001',
-            officerName: 'John Doe',
-            role: 'REVIEWER',
-            department: 'Documentation',
-            assignedAt: new Date('2024-09-25'),
-            taskStatus: 'COMPLETED',
-          },
-        ],
-        comments: [
-          {
-            id: 'c1',
-            text: 'Project looks promising. Need to verify land boundaries.',
-            authorId: 'O002',
-            authorName: 'Jane Smith',
-            authorRole: 'Inspector',
-            timestamp: new Date('2024-09-29'),
-            isInternal: true,
-          },
-        ],
-        riskScore: 35,
-        complianceScore: 65,
-      },
-      {
-        id: '3',
-        projectName: 'Greenhouse Vegetable Production',
-        farmerName: 'Emma Rodriguez',
-        farmerEmail: 'emma.r@example.com',
-        farmerId: 'F-2024-003',
-        location: 'Nyarugenge',
-        district: 'Nyarugenge District',
-        fundingRequested: 15000,
-        projectType: 'Greenhouse',
-        description: 'Modern greenhouse facility for year-round vegetable production.',
-        duration: 24,
-        expectedYield: '8 tons annually',
-        expectedROI: '38% annually',
-        status: ProjectStatus.DUE_DILIGENCE,
-        currentApprovalStep: ApprovalStep.STEP_6_COMPLIANCE,
-        priority: 'HIGH',
-        submittedAt: new Date('2024-09-20'),
-        updatedAt: new Date(),
-        dueDate: new Date('2024-10-10'),
-        documents: [],
-        approvalHistory: [],
-        dueDiligenceChecks: [],
-        assignedOfficers: [],
-        comments: [],
-        riskScore: 20,
-        complianceScore: 82,
-      },
-    ];
+    if (isAuthenticated && user) {
+      loadDashboardData();
+    }
+  }, [isAuthenticated, user]);
 
-    setProjects(mockProjects);
-  }, []);
+  useEffect(() => {
+    filterProjects();
+  }, [allProjects, activeTab, searchQuery, categoryFilter]);
 
-  // Calculate dashboard stats
-  const stats = {
-    totalProjects: projects.length,
-    pendingReview: projects.filter(p => p.status === ProjectStatus.SUBMITTED).length,
-    underReview: projects.filter(p => p.status === ProjectStatus.UNDER_REVIEW).length,
-    approved: projects.filter(p => p.status === ProjectStatus.APPROVED).length,
-    rejected: projects.filter(p => p.status === ProjectStatus.REJECTED).length,
-    needsRevision: projects.filter(p => p.status === ProjectStatus.REQUIRES_REVISION).length,
-    averageProcessingTime: '5.2 days',
-    todaySubmissions: 3,
-  };
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      console.log('🔄 Loading government dashboard data...');
 
-  // Handlers
-  const handleViewDetails = (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
-    if (project) {
-      setSelectedProject(project);
-      onDrawerOpen();
+      const hasGovernmentRole = user?.role === 'GOVERNMENT_OFFICIAL';
+      
+      if (!hasGovernmentRole) {
+        const errorMsg = `Access denied: Government official role required`;
+        console.error('❌', errorMsg);
+        setError(errorMsg);
+        toast({
+          title: 'Access Denied',
+          description: 'Government official role required',
+          status: 'error',
+          duration: 5000,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Load all projects for government dashboard
+      const projects = await projectApi.getAllProjectsForGovernment();
+      setAllProjects(projects);
+      
+      console.log(`✅ Loaded ${projects.length} projects`);
+
+    } catch (error: any) {
+      console.error('❌ Failed to load dashboard data:', error);
+      const errorMessage = error.message || 'Failed to load projects';
+      setError(errorMessage);
+      toast({
+        title: 'Error loading data',
+        description: errorMessage,
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAssignOfficer = (projectId: string) => {
-    // Implement officer assignment logic
-    console.log('Assign officer to project:', projectId);
+  const filterProjects = () => {
+    let filtered = [...allProjects];
+
+    // Filter by tab (status)
+    switch (activeTab) {
+      case 0: // All
+        break;
+      case 1: // Pending
+        filtered = filtered.filter(p => p.status === 'submitted');
+        break;
+      case 2: // Under Review
+        filtered = filtered.filter(p => p.status === 'under_review');
+        break;
+      case 3: // Approved
+        filtered = filtered.filter(p => p.status === 'active' || p.status === 'funded');
+        break;
+      case 4: // Rejected
+        filtered = filtered.filter(p => p.status === 'rejected');
+        break;
+      case 5: // My Department
+        if (user?.department) {
+          filtered = filtered.filter(p => p.department === user.department);
+        }
+        break;
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => 
+        p.title.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        p.location.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by category
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(p => p.category === categoryFilter);
+    }
+
+    setFilteredProjects(filtered);
+  };
+
+  const handleViewDetails = async (projectId: string) => {
+    try {
+      const apiProject = await projectApi.getProjectById(projectId);
+      setSelectedProject(apiProject);
+      setIsDetailsModalOpen(true);
+    } catch (error: any) {
+      console.error('❌ Error loading project details:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load project details',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleCloseDetailsModal = () => {
+    setIsDetailsModalOpen(false);
+    setSelectedProject(null);
   };
 
   const handleQuickApprove = (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = allProjects.find(p => p._id === projectId);
     if (project) {
       setSelectedProject(project);
       onApproveOpen();
     }
   };
-
+  
   const handleQuickReject = (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = allProjects.find(p => p._id === projectId);
     if (project) {
       setSelectedProject(project);
       onRejectOpen();
     }
   };
-
+  
   const handleRequestRevision = (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = allProjects.find(p => p._id === projectId);
     if (project) {
       setSelectedProject(project);
       onRevisionOpen();
     }
   };
 
-  const handleApproveStep = async (nextStep: ApprovalStep, comment: string) => {
+  const handleApproveConfirm = async (notes?: string) => {
     if (!selectedProject) return;
+    
+    try {
+      const updatedApiProject = await projectApi.verifyProject(selectedProject._id, notes);
+      
+      setAllProjects(prev => 
+        prev.map(p => p._id === selectedProject._id ? updatedApiProject : p)
+      );
+      
+      setSelectedProject(updatedApiProject);
 
-    // Update project status
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProject.id) {
-        return {
-          ...p,
-          currentApprovalStep: nextStep,
-          status: ProjectStatus.UNDER_REVIEW,
-          approvalHistory: [
-            ...p.approvalHistory,
-            {
-              id: `ah${Date.now()}`,
-              step: p.currentApprovalStep,
-              action: 'MOVED_TO_NEXT_STEP' as const,
-              comment,
-              officerId: user?.id || 'O001',
-              officerName: `${user?.firstName} ${user?.lastName}` || 'Officer',
-              officerRole: 'Government Official',
-              timestamp: new Date(),
-            },
-          ],
-        };
-      }
-      return p;
-    });
-
-    setProjects(updatedProjects);
-    setSelectedProject(updatedProjects.find(p => p.id === selectedProject.id) || null);
-  };
-
-  const handleRejectProject = async (reason: string, comment: string, notifyFarmer: boolean) => {
-    if (!selectedProject) return;
-
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProject.id) {
-        return {
-          ...p,
-          status: ProjectStatus.REJECTED,
-          approvalHistory: [
-            ...p.approvalHistory,
-            {
-              id: `ah${Date.now()}`,
-              step: p.currentApprovalStep,
-              action: 'REJECTED' as const,
-              comment: `${reason}: ${comment}`,
-              officerId: user?.id || 'O001',
-              officerName: `${user?.firstName} ${user?.lastName}` || 'Officer',
-              officerRole: 'Government Official',
-              timestamp: new Date(),
-            },
-          ],
-        };
-      }
-      return p;
-    });
-
-    setProjects(updatedProjects);
-    setSelectedProject(null);
-  };
-
-  const handleRequestRevisionSubmit = async (items: string[], comment: string, dueDate: string) => {
-    if (!selectedProject) return;
-
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProject.id) {
-        return {
-          ...p,
-          status: ProjectStatus.REQUIRES_REVISION,
-          dueDate: new Date(dueDate),
-          approvalHistory: [
-            ...p.approvalHistory,
-            {
-              id: `ah${Date.now()}`,
-              step: p.currentApprovalStep,
-              action: 'REVISION_REQUESTED' as const,
-              comment: `Revisions needed: ${items.join(', ')}. ${comment}`,
-              officerId: user?.id || 'O001',
-              officerName: `${user?.firstName} ${user?.lastName}` || 'Officer',
-              officerRole: 'Government Official',
-              timestamp: new Date(),
-            },
-          ],
-        };
-      }
-      return p;
-    });
-
-    setProjects(updatedProjects);
-    setSelectedProject(null);
-  };
-
-  const handleUpdateDueDiligenceCheck = async (
-    checkId: string,
-    status: string,
-    findings: string,
-    recommendation: string,
-    score: number
-  ) => {
-    if (!selectedProject) return;
-
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProject.id) {
-        const updatedChecks = p.dueDiligenceChecks.map(check => {
-          if (check.id === checkId) {
-            return {
-              ...check,
-              status: status as any,
-              findings,
-              recommendation: recommendation as any,
-              score,
-              completedAt: status === 'COMPLETED' ? new Date() : check.completedAt,
-            };
-          }
-          return check;
-        });
-
-        // Recalculate compliance score
-        const totalScore = updatedChecks.reduce((sum, c) => sum + c.score, 0);
-        const complianceScore = updatedChecks.length > 0 ? Math.round(totalScore / updatedChecks.length) : 0;
-
-        return {
-          ...p,
-          dueDiligenceChecks: updatedChecks,
-          complianceScore,
-        };
-      }
-      return p;
-    });
-
-    setProjects(updatedProjects);
-    setSelectedProject(updatedProjects.find(p => p.id === selectedProject.id) || null);
-  };
-
-  const handleMoveToNextStep = () => {
-    if (selectedProject) {
-      onApproveOpen();
+      toast({
+        title: 'Project Approved ✓',
+        description: 'Project has been successfully approved',
+        status: 'success',
+        duration: 3000,
+      });
+      
+      onApproveClose();
+      setIsDetailsModalOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Approval Failed',
+        description: error.message || 'Please try again',
+        status: 'error',
+        duration: 3000,
+      });
     }
   };
+
+  const handleRejectConfirm = async (reason: string) => {
+    if (!selectedProject) return;
+    
+    try {
+      const updatedApiProject = await projectApi.rejectProject(selectedProject._id, reason);
+      
+      setAllProjects(prev => 
+        prev.map(p => p._id === selectedProject._id ? updatedApiProject : p)
+      );
+      
+      setSelectedProject(updatedApiProject);
+
+      toast({
+        title: 'Project Rejected',
+        description: 'Project has been rejected',
+        status: 'success',
+        duration: 3000,
+      });
+      
+      onRejectClose();
+      setIsDetailsModalOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Rejection Failed',
+        description: error.message || 'Please try again',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleRevisionConfirm = async (notes: string) => {
+    if (!selectedProject) return;
+    
+    try {
+      const updatedApiProject = await projectApi.updateDueDiligence(selectedProject._id, {
+        notes: notes,
+        status: 'in_progress'
+      });
+      
+      setAllProjects(prev => 
+        prev.map(p => p._id === selectedProject._id ? updatedApiProject : p)
+      );
+      
+      setSelectedProject(updatedApiProject);
+
+      toast({
+        title: 'Revision Requested',
+        description: 'Farmer has been notified',
+        status: 'success',
+        duration: 3000,
+      });
+      
+      onRevisionClose();
+      setIsDetailsModalOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Request Failed',
+        description: error.message || 'Please try again',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const calculateStats = () => {
+    const statusCount = {
+      submitted: 0,
+      under_review: 0,
+      active: 0,
+      rejected: 0,
+      funded: 0,
+    };
+
+    allProjects.forEach(project => {
+      statusCount[project.status] = (statusCount[project.status] || 0) + 1;
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todaySubmissions = allProjects.filter(project => {
+      const projectDate = new Date(project.createdAt);
+      projectDate.setHours(0, 0, 0, 0);
+      return projectDate.getTime() === today.getTime();
+    }).length;
+
+    return {
+      totalProjects: allProjects.length,
+      pendingReview: statusCount.submitted,
+      underReview: statusCount.under_review,
+      approved: statusCount.active + statusCount.funded,
+      rejected: statusCount.rejected,
+      needsRevision: allProjects.filter(p => 
+        p.dueDiligence?.status === 'in_progress' && 
+        p.status === 'under_review'
+      ).length,
+      averageProcessingTime: "3 days",
+      todaySubmissions
+    };
+  };
+
+  const stats = calculateStats();
+
+  const getTabCount = (index: number) => {
+    switch (index) {
+      case 0: return allProjects.length;
+      case 1: return stats.pendingReview;
+      case 2: return stats.underReview;
+      case 3: return stats.approved;
+      case 4: return stats.rejected;
+      case 5: return allProjects.filter(p => p.department === user?.department).length;
+      default: return 0;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <RouteGuard allowedRoles={['GOVERNMENT_OFFICIAL']}>
+        <WalletConnectionGuard 
+          title="Connect Wallet to Government Dashboard"
+          description="Connect your wallet to monitor platform activities and review projects."
+        >
+          <Box minH="100vh" bg="gray.50">
+            <DashboardHeader
+              firstName={user?.firstName || 'Government'}
+              lastName={user?.lastName || 'Official'}
+              address={address}
+              onLogout={logout}
+            />
+            <Container maxW="7xl" py={8}>
+              <VStack spacing={8} align="center" justify="center" minH="50vh">
+                <Spinner size="xl" color="purple.500" thickness="4px" />
+                <Text fontSize="lg" fontWeight="medium">Loading dashboard...</Text>
+              </VStack>
+            </Container>
+          </Box>
+        </WalletConnectionGuard>
+      </RouteGuard>
+    );
+  }
 
   return (
     <RouteGuard allowedRoles={['GOVERNMENT_OFFICIAL']}>
       <WalletConnectionGuard 
         title="Connect Wallet to Government Dashboard"
-        description="Connect your wallet to monitor platform activities, review compliance, and manage agricultural investment oversight on the blockchain."
+        description="Connect your wallet to monitor platform activities and review projects."
       >
         <Box minH="100vh" bg="gray.50">
           <DashboardHeader
@@ -486,173 +397,182 @@ export default function GovernmentDashboard() {
           />
 
           <Container maxW="7xl" py={8}>
-            <VStack spacing={8} align="stretch">
-              {/* Dashboard Stats */}
-              <GovDashboardStats
-                totalProjects={stats.totalProjects}
-                pendingReview={stats.pendingReview}
-                underReview={stats.underReview}
-                approved={stats.approved}
-                rejected={stats.rejected}
-                needsRevision={stats.needsRevision}
-                averageProcessingTime={stats.averageProcessingTime}
-                todaySubmissions={stats.todaySubmissions}
-              />
+            <VStack spacing={6} align="stretch">
+              {/* Error Alert */}
+              {error && (
+                <Alert status="error" borderRadius="lg">
+                  <AlertIcon />
+                  <Box flex="1">
+                    <Text fontWeight="bold">Error Loading Data</Text>
+                    <Text fontSize="sm">{error}</Text>
+                  </Box>
+                  <Button size="sm" onClick={loadDashboardData} ml={3}>
+                    Retry
+                  </Button>
+                </Alert>
+              )}
 
-              {/* Projects Table */}
-              <ProjectsTable
-                projects={projects}
-                onViewDetails={handleViewDetails}
-                onAssignOfficer={handleAssignOfficer}
-                onQuickApprove={handleQuickApprove}
-                onQuickReject={handleQuickReject}
-                onRequestRevision={handleRequestRevision}
-              />
+              {/* Dashboard Stats */}
+              <GovDashboardStats {...stats} />
+
+              {/* Search and Filter Bar */}
+              <HStack spacing={4}>
+                <InputGroup flex={1}>
+                  <InputLeftElement>
+                    <Icon as={FiSearch} color="gray.400" />
+                  </InputLeftElement>
+                  <Input
+                    placeholder="Search projects by title, location..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    bg="white"
+                  />
+                </InputGroup>
+
+                <Select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  bg="white"
+                  w="250px"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="VEGETABLE_FARMING">Vegetable Farming</option>
+                  <option value="POULTRY_FARMING">Poultry Farming</option>
+                  <option value="CROP_PRODUCTION">Crop Production</option>
+                  <option value="LIVESTOCK_FARMING">Livestock Farming</option>
+                  <option value="FISH_FARMING">Fish Farming</option>
+                </Select>
+
+                <Button
+                  leftIcon={<FiRefreshCw />}
+                  onClick={loadDashboardData}
+                  isLoading={isLoading}
+                  colorScheme="purple"
+                  variant="outline"
+                >
+                  Refresh
+                </Button>
+              </HStack>
+
+              {/* Tabs */}
+              <Box bg="white" borderRadius="lg" boxShadow="sm">
+                <Tabs 
+                  colorScheme="purple" 
+                  index={activeTab} 
+                  onChange={setActiveTab}
+                >
+                  <TabList px={4} borderBottom="2px" borderColor="gray.100">
+                    <Tab fontWeight="medium">
+                      <HStack spacing={2}>
+                        <Icon as={FiFilter} />
+                        <Text>All</Text>
+                        <Badge colorScheme="gray">{getTabCount(0)}</Badge>
+                      </HStack>
+                    </Tab>
+                    <Tab fontWeight="medium">
+                      <HStack spacing={2}>
+                        <Icon as={FiClock} />
+                        <Text>Pending</Text>
+                        <Badge colorScheme="orange">{getTabCount(1)}</Badge>
+                      </HStack>
+                    </Tab>
+                    <Tab fontWeight="medium">
+                      <HStack spacing={2}>
+                        <Icon as={FiAlertCircle} />
+                        <Text>Under Review</Text>
+                        <Badge colorScheme="blue">{getTabCount(2)}</Badge>
+                      </HStack>
+                    </Tab>
+                    <Tab fontWeight="medium">
+                      <HStack spacing={2}>
+                        <Icon as={FiCheckCircle} />
+                        <Text>Approved</Text>
+                        <Badge colorScheme="green">{getTabCount(3)}</Badge>
+                      </HStack>
+                    </Tab>
+                    <Tab fontWeight="medium">
+                      <HStack spacing={2}>
+                        <Icon as={FiXCircle} />
+                        <Text>Rejected</Text>
+                        <Badge colorScheme="red">{getTabCount(4)}</Badge>
+                      </HStack>
+                    </Tab>
+                    {user?.department && (
+                      <Tab fontWeight="medium">
+                        <HStack spacing={2}>
+                          <Text>My Department</Text>
+                          <Badge colorScheme="purple">{getTabCount(5)}</Badge>
+                        </HStack>
+                      </Tab>
+                    )}
+                  </TabList>
+
+                  <TabPanels>
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <TabPanel key={index} p={0}>
+                        {filteredProjects.length === 0 ? (
+                          <Box py={12} textAlign="center">
+                            <Text color="gray.500" fontSize="lg">
+                              No projects found
+                            </Text>
+                            <Text color="gray.400" fontSize="sm" mt={2}>
+                              {searchQuery || categoryFilter !== 'all' 
+                                ? 'Try adjusting your filters' 
+                                : 'All caught up!'}
+                            </Text>
+                          </Box>
+                        ) : (
+                          <ProjectsTable
+                            projects={filteredProjects}
+                            onViewDetails={handleViewDetails}
+                            onQuickApprove={handleQuickApprove}
+                            onQuickReject={handleQuickReject}
+                            onRequestRevision={handleRequestRevision}
+                            onAssignOfficer={() => {}}
+                          />
+                        )}
+                      </TabPanel>
+                    ))}
+                  </TabPanels>
+                </Tabs>
+              </Box>
             </VStack>
           </Container>
         </Box>
 
-        {/* Project Details Drawer */}
-        <Drawer isOpen={isDrawerOpen} placement="right" onClose={onDrawerClose} size="xl">
-          <DrawerOverlay />
-          <DrawerContent>
-            <DrawerCloseButton />
-            <DrawerHeader borderBottomWidth="1px">
-              {selectedProject && (
-                <VStack align="start" spacing={2}>
-                  <Text fontSize="lg" fontWeight="bold">{selectedProject.projectName}</Text>
-                  <HStack>
-                    <Badge colorScheme="purple" fontSize="sm">
-                      {selectedProject.status.replace(/_/g, ' ')}
-                    </Badge>
-                    <Badge colorScheme="blue" fontSize="sm">
-                      {selectedProject.priority}
-                    </Badge>
-                    <Badge colorScheme="orange" fontSize="sm">
-                      {selectedProject.farmerId}
-                    </Badge>
-                  </HStack>
-                </VStack>
-              )}
-            </DrawerHeader>
-
-            <DrawerBody>
-              {selectedProject && (
-                <Tabs colorScheme="purple">
-                  <TabList>
-                    <Tab>Workflow</Tab>
-                    <Tab>Due Diligence</Tab>
-                    <Tab>History</Tab>
-                    <Tab>Documents</Tab>
-                  </TabList>
-
-                  <TabPanels>
-                    <TabPanel px={0}>
-                      <ApprovalWorkflowTracker
-                        project={selectedProject}
-                        onMoveToNextStep={handleMoveToNextStep}
-                      />
-                    </TabPanel>
-
-                    <TabPanel px={0}>
-                      <DueDiligencePanel
-                        project={selectedProject}
-                        onUpdateCheck={handleUpdateDueDiligenceCheck}
-                      />
-                    </TabPanel>
-
-                    <TabPanel px={0}>
-                      <VStack spacing={4} align="stretch">
-                        <Text fontSize="sm" fontWeight="semibold">Approval History</Text>
-                        {selectedProject.approvalHistory.length === 0 ? (
-                          <Text fontSize="sm" color="gray.500">No history yet</Text>
-                        ) : (
-                          selectedProject.approvalHistory.map((history) => (
-                            <Box key={history.id} p={4} borderWidth="1px" borderRadius="md">
-                              <HStack justify="space-between" mb={2}>
-                                <Badge colorScheme={
-                                  history.action === 'MOVED_TO_NEXT_STEP' ? 'green' :
-                                  history.action === 'REJECTED' ? 'red' : 'orange'
-                                }>
-                                  {history.action.replace(/_/g, ' ')}
-                                </Badge>
-                                <Text fontSize="xs" color="gray.500">
-                                  {new Date(history.timestamp).toLocaleString()}
-                                </Text>
-                              </HStack>
-                              <Text fontSize="sm" fontWeight="medium" mb={1}>
-                                {history.step.replace(/_/g, ' ')}
-                              </Text>
-                              <Text fontSize="sm" color="gray.700">{history.comment}</Text>
-                              <Text fontSize="xs" color="gray.500" mt={2}>
-                                By {history.officerName} ({history.officerRole})
-                              </Text>
-                            </Box>
-                          ))
-                        )}
-                      </VStack>
-                    </TabPanel>
-
-                    <TabPanel px={0}>
-                      <VStack spacing={4} align="stretch">
-                        <Text fontSize="sm" fontWeight="semibold">Project Documents</Text>
-                        {selectedProject.documents.length === 0 ? (
-                          <Text fontSize="sm" color="gray.500">No documents uploaded</Text>
-                        ) : (
-                          selectedProject.documents.map((doc) => (
-                            <Box key={doc.id} p={4} borderWidth="1px" borderRadius="md">
-                              <HStack justify="space-between">
-                                <VStack align="start" spacing={0}>
-                                  <Text fontWeight="medium">{doc.name}</Text>
-                                  <Text fontSize="xs" color="gray.500">
-                                    {doc.category.replace(/_/g, ' ')} • {doc.size}
-                                  </Text>
-                                </VStack>
-                                <Badge colorScheme={doc.verified ? 'green' : 'gray'}>
-                                  {doc.verified ? 'Verified' : 'Unverified'}
-                                </Badge>
-                              </HStack>
-                            </Box>
-                          ))
-                        )}
-                      </VStack>
-                    </TabPanel>
-                  </TabPanels>
-                </Tabs>
-              )}
-            </DrawerBody>
-          </DrawerContent>
-        </Drawer>
-
-        {/* Approval Modal */}
+        {/* Modals */}
         {selectedProject && (
-          <ApprovalActionModal
-            isOpen={isApproveOpen}
-            onClose={onApproveClose}
-            currentStep={selectedProject.currentApprovalStep}
-            projectName={selectedProject.projectName}
-            onApprove={handleApproveStep}
-          />
-        )}
+          <>
+            <GovernmentProjectDetailsModal
+              isOpen={isDetailsModalOpen}
+              onClose={handleCloseDetailsModal}
+              project={selectedProject}
+              onApprove={() => handleQuickApprove(selectedProject._id)}
+              onReject={() => handleQuickReject(selectedProject._id)}
+              onRequestRevision={() => handleRequestRevision(selectedProject._id)}
+            />
 
-        {/* Reject Modal */}
-        {selectedProject && (
-          <RejectProjectModal
-            isOpen={isRejectOpen}
-            onClose={onRejectClose}
-            projectName={selectedProject.projectName}
-            onReject={handleRejectProject}
-          />
-        )}
+            <ApprovalActionModal
+              isOpen={isApproveOpen}
+              onClose={onApproveClose}
+              onConfirm={handleApproveConfirm}
+              project={selectedProject}
+            />
 
-        {/* Revision Request Modal */}
-        {selectedProject && (
-          <RevisionRequestModal
-            isOpen={isRevisionOpen}
-            onClose={onRevisionClose}
-            projectName={selectedProject.projectName}
-            onRequestRevision={handleRequestRevisionSubmit}
-          />
+            <RejectProjectModal
+              isOpen={isRejectOpen}
+              onClose={onRejectClose}
+              onConfirm={handleRejectConfirm}
+              project={selectedProject}
+            />
+
+            <RevisionRequestModal
+              isOpen={isRevisionOpen}
+              onClose={onRevisionClose}
+              onConfirm={handleRevisionConfirm}
+              project={selectedProject}
+            />
+          </>
         )}
       </WalletConnectionGuard>
     </RouteGuard>

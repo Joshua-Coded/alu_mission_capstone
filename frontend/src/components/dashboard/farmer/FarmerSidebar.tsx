@@ -1,6 +1,6 @@
 "use client";
 import NextLink from "next/link";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import {
@@ -11,24 +11,16 @@ import {
   Button,
   Icon,
   useColorModeValue,
-  Collapse,
   Divider,
   Badge,
   Avatar,
   Tooltip,
+  Spinner,
 } from '@chakra-ui/react';
 import { 
   FiHome,
-  FiBarChart,
-  FiDollarSign,
-  FiUsers,
-  FiCalendar,
-  FiMapPin,
+  FiFolder,
   FiUser,
-  FiChevronDown,
-  FiChevronRight,
-  FiTrendingUp,
-  FiSend,
   FiPackage,
 } from 'react-icons/fi';
 
@@ -44,11 +36,47 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
   
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const activeBg = useColorModeValue('brand.50', 'brand.900');
-  const activeColor = useColorModeValue('brand.600', 'brand.200');
+  const activeBg = useColorModeValue('green.50', 'green.900');
+  const activeColor = useColorModeValue('green.600', 'green.200');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
-  const mainNavItems = [
+  const [stats, setStats] = useState({
+    activeProjects: 0,
+    totalFunding: 0,
+    loading: true,
+  });
+
+  // Load real stats from API
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/my-projects`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
+        });
+        
+        if (response.ok) {
+          const projects = await response.json();
+          const activeCount = projects.filter((p: any) => p.status === 'active').length;
+          const totalFunding = projects.reduce((sum: number, p: any) => sum + (p.currentFunding || 0), 0);
+          
+          setStats({
+            activeProjects: activeCount,
+            totalFunding,
+            loading: false,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load sidebar stats:', error);
+        setStats({ activeProjects: 0, totalFunding: 0, loading: false });
+      }
+    };
+
+    loadStats();
+  }, []);
+
+  const navItems = [
     {
       label: 'Dashboard',
       icon: FiHome,
@@ -56,62 +84,10 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
       isActive: pathname === '/dashboard/farmer' && !currentTab,
     },
     {
-      label: 'Projects',
-      icon: FiBarChart,
+      label: 'My Projects',
+      icon: FiFolder,
       href: '/dashboard/farmer?tab=projects',
       isActive: currentTab === 'projects',
-      hasSubmenu: true,
-      submenu: [
-        { label: 'All Projects', href: '/dashboard/farmer?tab=projects', icon: FiBarChart },
-        { label: 'Active Projects', href: '/dashboard/farmer?tab=projects&filter=active', icon: FiBarChart },
-        { label: 'Completed Projects', href: '/dashboard/farmer?tab=projects&filter=completed', icon: FiBarChart },
-        { label: 'Create New', href: '/dashboard/farmer?tab=projects&action=create', icon: FiBarChart },
-      ]
-    },
-    {
-      label: 'Investments',
-      icon: FiDollarSign,
-      href: '/dashboard/farmer?tab=investments',
-      isActive: currentTab === 'investments',
-    },
-    {
-      label: 'Investors',
-      icon: FiUsers,
-      href: '/dashboard/farmer?tab=investors',
-      isActive: currentTab === 'investors',
-    },
-    {
-      label: 'Analytics',
-      icon: FiTrendingUp,
-      href: '/dashboard/farmer?tab=analytics',
-      isActive: currentTab === 'analytics',
-      hasSubmenu: true,
-      submenu: [
-        { label: 'Performance', href: '/dashboard/farmer?tab=analytics&view=performance', icon: FiTrendingUp },
-        { label: 'Revenue', href: '/dashboard/farmer?tab=analytics&view=revenue', icon: FiTrendingUp },
-        { label: 'ROI Analysis', href: '/dashboard/farmer?tab=analytics&view=roi', icon: FiTrendingUp },
-      ]
-    },
-  ];
-
-  const farmingNavItems = [
-    {
-      label: 'Farm Schedule',
-      icon: FiCalendar,
-      href: '/dashboard/farmer?tab=schedule',
-      isActive: currentTab === 'schedule',
-    },
-    {
-      label: 'Farm Location',
-      icon: FiMapPin,
-      href: '/dashboard/farmer?tab=location',
-      isActive: currentTab === 'location',
-    },
-    {
-      label: 'Crops & Seeds',
-      icon: FiSend,
-      href: '/dashboard/farmer?tab=crops',
-      isActive: currentTab === 'crops',
     },
     {
       label: 'Inventory',
@@ -119,81 +95,55 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
       href: '/dashboard/farmer?tab=inventory',
       isActive: currentTab === 'inventory',
     },
-  ];
-
-  const accountNavItems = [
     {
-      label: 'Profile & Settings',
+      label: 'Profile',
       icon: FiUser,
       href: '/dashboard/farmer?tab=profile',
       isActive: currentTab === 'profile',
     },
   ];
 
-  const NavItem = ({ item, level = 0 }: { item: any; level?: number }) => {
-    const isSubmenuItem = level > 0;
-    
+  const NavItem = ({ item }: { item: any }) => {
     return (
-      <Box w="full">
-        <Tooltip 
-          label={isCollapsed ? item.label : ''} 
-          placement="right" 
-          isDisabled={!isCollapsed}
+      <Tooltip 
+        label={isCollapsed ? item.label : ''} 
+        placement="right" 
+        isDisabled={!isCollapsed}
+      >
+        <Button
+          as={NextLink}
+          href={item.href}
+          variant="ghost"
+          justifyContent={isCollapsed ? 'center' : 'flex-start'}
+          w="full"
+          h="auto"
+          py={3}
+          px={isCollapsed ? 2 : 4}
+          bg={item.isActive ? activeBg : 'transparent'}
+          color={item.isActive ? activeColor : 'gray.600'}
+          _hover={{
+            bg: item.isActive ? activeBg : hoverBg,
+            color: item.isActive ? activeColor : 'gray.800',
+          }}
+          borderRadius="lg"
+          fontWeight={item.isActive ? 'semibold' : 'medium'}
+          fontSize="md"
+          transition="all 0.2s"
         >
-          <Button
-            as={NextLink}
-            href={item.href}
-            variant="ghost"
-            justifyContent={isCollapsed ? 'center' : 'flex-start'}
-            w="full"
-            h="auto"
-            py={3}
-            px={isCollapsed ? 2 : 4}
-            pl={isSubmenuItem && !isCollapsed ? 8 : isCollapsed ? 2 : 4}
-            bg={item.isActive ? activeBg : 'transparent'}
-            color={item.isActive ? activeColor : 'gray.600'}
-            _hover={{
-              bg: item.isActive ? activeBg : hoverBg,
-              color: item.isActive ? activeColor : 'gray.800',
-            }}
-            borderRadius="lg"
-            fontWeight={item.isActive ? 'semibold' : 'medium'}
-            fontSize={isSubmenuItem ? 'sm' : 'md'}
-          >
-            <HStack spacing={3} w="full">
-              <Icon 
-                as={item.icon} 
-                boxSize={isSubmenuItem ? 4 : 5}
-                color={item.isActive ? activeColor : 'gray.500'}
-              />
-              {!isCollapsed && (
-                <>
-                  <Text flex="1" textAlign="left">
-                    {item.label}
-                  </Text>
-                  {item.hasSubmenu && (
-                    <Icon 
-                      as={item.isActive ? FiChevronDown : FiChevronRight} 
-                      boxSize={4}
-                    />
-                  )}
-                </>
-              )}
-            </HStack>
-          </Button>
-        </Tooltip>
-        
-        {/* Submenu */}
-        {item.hasSubmenu && !isCollapsed && (
-          <Collapse in={item.isActive}>
-            <VStack spacing={1} mt={2} align="stretch">
-              {item.submenu?.map((subItem: any, index: number) => (
-                <NavItem key={index} item={subItem} level={1} />
-              ))}
-            </VStack>
-          </Collapse>
-        )}
-      </Box>
+          <HStack spacing={3} w="full">
+            <Icon 
+              as={item.icon} 
+              boxSize={5}
+              color={item.isActive ? activeColor : 'gray.500'}
+            />
+            {!isCollapsed && (
+              <Text flex="1" textAlign="left">
+                {item.label}
+              </Text>
+            )}
+          </HStack>
+        </Button>
+      </Tooltip>
     );
   };
 
@@ -225,93 +175,73 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
     >
       <VStack spacing={0} align="stretch" h="full">
         {/* User Profile Section */}
-        <Box p={isCollapsed ? 2 : 6} borderBottom="1px" borderColor={borderColor}>
+        <Box p={isCollapsed ? 2 : 4} borderBottom="1px" borderColor={borderColor}>
           {isCollapsed ? (
-            <Avatar
-              size="sm"
-              name={`${user?.firstName} ${user?.lastName}`}
-              bg="brand.500"
-              mx="auto"
-            />
-          ) : (
-            <VStack spacing={3}>
+            <Tooltip label={`${user?.firstName} ${user?.lastName}`} placement="right">
               <Avatar
-                size="lg"
+                size="sm"
                 name={`${user?.firstName} ${user?.lastName}`}
-                bg="brand.500"
+                bg="green.500"
+                src={user?.profileImage}
+                mx="auto"
+              />
+            </Tooltip>
+          ) : (
+            <HStack spacing={3}>
+              <Avatar
+                size="md"
+                name={`${user?.firstName} ${user?.lastName}`}
+                bg="green.500"
                 src={user?.profileImage}
               />
-              <VStack spacing={1}>
-                <Text fontWeight="bold" color="gray.800">
+              <VStack spacing={0} align="start" flex={1}>
+                <Text fontWeight="bold" fontSize="sm" color="gray.800" noOfLines={1}>
                   {user?.firstName} {user?.lastName}
                 </Text>
-                <Badge colorScheme="green" size="sm">
-                  Verified Farmer
+                <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                  {user?.email}
+                </Text>
+                <Badge colorScheme="green" fontSize="xs" mt={1}>
+                  Farmer
                 </Badge>
               </VStack>
-            </VStack>
+            </HStack>
           )}
         </Box>
 
-        {/* Navigation Sections */}
-        <VStack spacing={6} align="stretch" p={isCollapsed ? 2 : 4} flex="1">
-          {/* Main Navigation */}
-          <VStack spacing={1} align="stretch">
-            {!isCollapsed && (
-              <Text fontSize="xs" fontWeight="bold" color="gray.400" px={2} mb={2}>
-                MAIN
-              </Text>
-            )}
-            {mainNavItems.map((item, index) => (
-              <NavItem key={index} item={item} />
-            ))}
-          </VStack>
-
-          <Divider />
-
-          {/* Farming Section */}
-          <VStack spacing={1} align="stretch">
-            {!isCollapsed && (
-              <Text fontSize="xs" fontWeight="bold" color="gray.400" px={2} mb={2}>
-                FARMING
-              </Text>
-            )}
-            {farmingNavItems.map((item, index) => (
-              <NavItem key={index} item={item} />
-            ))}
-          </VStack>
-
-          <Divider />
-
-          {/* Account Section */}
-          <VStack spacing={1} align="stretch">
-            {!isCollapsed && (
-              <Text fontSize="xs" fontWeight="bold" color="gray.400" px={2} mb={2}>
-                ACCOUNT
-              </Text>
-            )}
-            {accountNavItems.map((item, index) => (
-              <NavItem key={index} item={item} />
-            ))}
-          </VStack>
+        {/* Navigation */}
+        <VStack spacing={2} align="stretch" p={isCollapsed ? 2 : 4} flex="1">
+          {navItems.map((item, index) => (
+            <NavItem key={index} item={item} />
+          ))}
         </VStack>
 
         {/* Bottom Stats (when not collapsed) */}
         {!isCollapsed && (
-          <Box p={4} borderTop="1px" borderColor={borderColor}>
-            <VStack spacing={2}>
-              <HStack justify="space-between" w="full">
-                <Text fontSize="xs" color="gray.500">Active Projects</Text>
-                <Text fontSize="xs" fontWeight="bold">3</Text>
-              </HStack>
-              <HStack justify="space-between" w="full">
-                <Text fontSize="xs" color="gray.500">Total Funding</Text>
-                <Text fontSize="xs" fontWeight="bold" color="green.500">$45,250</Text>
-              </HStack>
-              <HStack justify="space-between" w="full">
-                <Text fontSize="xs" color="gray.500">ROI</Text>
-                <Text fontSize="xs" fontWeight="bold" color="purple.500">18.5%</Text>
-              </HStack>
+          <Box p={4} borderTop="1px" borderColor={borderColor} bg={useColorModeValue('gray.50', 'gray.900')}>
+            <VStack spacing={3}>
+              <Text fontSize="xs" fontWeight="bold" color="gray.400" w="full" textAlign="left">
+                QUICK STATS
+              </Text>
+              
+              {stats.loading ? (
+                <Spinner size="sm" color="green.500" />
+              ) : (
+                <>
+                  <HStack justify="space-between" w="full">
+                    <Text fontSize="xs" color="gray.600">Active Projects</Text>
+                    <Badge colorScheme="green" fontSize="xs">
+                      {stats.activeProjects}
+                    </Badge>
+                  </HStack>
+                  <HStack justify="space-between" w="full">
+                    <Text fontSize="xs" color="gray.600">Total Funding</Text>
+                    <Text fontSize="xs" fontWeight="bold" color="green.600">
+                      ${stats.totalFunding.toLocaleString()}
+                    </Text>
+                  </HStack>
+                </>
+              )}
             </VStack>
           </Box>
         )}

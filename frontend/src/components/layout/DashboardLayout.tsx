@@ -71,19 +71,21 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* Top Header */}
       <TopHeader
         user={user}
-        address={address}
+      
         onLogout={logout}
         onToggleSidebar={toggleSidebar}
         sidebarCollapsed={sidebarCollapsed}
       />
       
-      {/* Main Content */}
+      {/* Main Content - FIXED: Full width with proper spacing */}
       <Box 
         ml={sidebarCollapsed ? '70px' : '280px'}
         transition="margin-left 0.3s ease"
         pt={4}
         pb={8}
-        px={8}
+        px={{ base: 4, md: 6 }}
+        w={`calc(100% - ${sidebarCollapsed ? '70px' : '280px'})`}
+        minH="100vh"
       >
         {children}
       </Box>

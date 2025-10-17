@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { FiCopy, FiMail, FiShare2 } from "react-icons/fi";
+import { FiCheckCircle, FiCopy, FiMail, FiShare2 } from "react-icons/fi";
+import { Project as ApiProject } from "../../../lib/projectApi";
 
-// components/dashboard/farmer/ShareProjectModal.tsx
 import { 
   FaWhatsapp, 
   FaTwitter, 
@@ -32,31 +32,15 @@ import {
   Badge,
   InputGroup,
   InputRightElement,
+  IconButton,
 } from '@chakra-ui/react';
-
-interface Project {
-  id: string;
-  name: string;
-  progress: number;
-  funding: string;
-  fundingGoal: string;
-  investors: number;
-  phase: string;
-  roi: string;
-  status: string;
-  description: string;
-  expectedHarvest: string;
-  location: string;
-  images?: string[];
-}
 
 interface ShareProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: Project | null;
+  project: ApiProject | null;
 }
 
-// ✅ REMOVED async keyword - React components cannot be async
 export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
   isOpen,
   onClose,
@@ -67,30 +51,32 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
 
   if (!project) return null;
 
-  // Generate share URL (adjust based on your routing structure)
-  const shareUrl = `${window.location.origin}/projects/${project.id}`;
+  const shareUrl = `${window.location.origin}/projects/${project._id}`;
+  const progress = project.fundingGoal > 0 
+    ? (project.currentFunding / project.fundingGoal) * 100 
+    : 0;
   
-  // Generate share text
-  const shareText = `Check out this farming project: ${project.name}\n\n${project.description}\n\nLocation: ${project.location}\nFunding: ${project.funding} / ${project.fundingGoal}\nExpected Harvest: ${project.expectedHarvest}`;
+  const formatCurrency = (amount: number) => `$${amount.toLocaleString()}`;
+
+  const shareText = `Check out this farming project: ${project.title}\n\n${project.description}\n\nLocation: ${project.location}\nFunding: ${formatCurrency(project.currentFunding)} / ${formatCurrency(project.fundingGoal)}\nTimeline: ${project.timeline}`;
 
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       toast({
-        title: "Link Copied!",
-        description: "Project link has been copied to clipboard.",
+        title: "Copied!",
+        description: "Project link copied to clipboard",
         status: "success",
         duration: 2000,
         isClosable: true,
       });
       
-      // Reset copied state after 2 seconds
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       toast({
         title: "Copy Failed",
-        description: "Could not copy link. Please copy manually.",
+        description: "Please copy the link manually",
         status: "error",
         duration: 2000,
         isClosable: true,
@@ -99,28 +85,28 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
   };
 
   const handleEmailShare = () => {
-    const subject = encodeURIComponent(`Investment Opportunity: ${project.name}`);
+    const subject = encodeURIComponent(`Investment Opportunity: ${project.title}`);
     const body = encodeURIComponent(
       `I thought you might be interested in this agricultural investment opportunity:\n\n` +
-      `Project: ${project.name}\n` +
+      `Project: ${project.title}\n` +
       `Description: ${project.description}\n\n` +
       `📍 Location: ${project.location}\n` +
-      `💰 Funding: ${project.funding} of ${project.fundingGoal}\n` +
-      `📊 Progress: ${project.progress}% funded\n` +
-      `🌾 Expected Harvest: ${project.expectedHarvest}\n` +
-      `👥 Investors: ${project.investors}\n\n` +
-      `Learn more and invest here: ${shareUrl}`
+      `💰 Funding: ${formatCurrency(project.currentFunding)} of ${formatCurrency(project.fundingGoal)}\n` +
+      `📊 Progress: ${Math.round(progress)}% funded\n` +
+      `🌾 Timeline: ${project.timeline}\n` +
+      `👥 Contributors: ${project.contributorsCount}\n\n` +
+      `Learn more and invest: ${shareUrl}`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
   const handleWhatsAppShare = () => {
     const text = encodeURIComponent(
-      `🌾 *${project.name}*\n\n` +
+      `🌾 *${project.title}*\n\n` +
       `${project.description}\n\n` +
       `📍 ${project.location}\n` +
-      `💰 ${project.funding} / ${project.fundingGoal} (${project.progress}% funded)\n` +
-      `🌱 ${project.expectedHarvest}\n\n` +
+      `💰 ${formatCurrency(project.currentFunding)} / ${formatCurrency(project.fundingGoal)} (${Math.round(progress)}%)\n` +
+      `🌱 ${project.timeline}\n\n` +
       `Invest now: ${shareUrl}`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
@@ -128,10 +114,10 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
 
   const handleTwitterShare = () => {
     const text = encodeURIComponent(
-      `🌾 Exciting agricultural project: ${project.name}\n\n` +
+      `🌾 Exciting agricultural project: ${project.title}\n\n` +
       `📍 ${project.location}\n` +
-      `💰 ${project.progress}% funded\n` +
-      `🌱 Expected harvest: ${project.expectedHarvest}\n\n` +
+      `💰 ${Math.round(progress)}% funded\n` +
+      `🌱 ${project.timeline}\n\n` +
       `#Agriculture #Farming #Investment #Sustainability`
     );
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(shareUrl)}`, '_blank');
@@ -155,8 +141,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
 
   const handleTelegramShare = () => {
     const text = encodeURIComponent(
-      `🌾 ${project.name}\n\n${project.description}\n\n` +
-      `📍 ${project.location} | 💰 ${project.progress}% funded`
+      `🌾 ${project.title}\n\n${project.description}\n\n` +
+      `📍 ${project.location} | 💰 ${Math.round(progress)}% funded`
     );
     window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${text}`, '_blank');
   };
@@ -165,7 +151,7 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: project.name,
+          title: project.title,
           text: shareText,
           url: shareUrl,
         });
@@ -175,97 +161,135 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
           duration: 2000,
         });
       } catch (error) {
-        // User cancelled share
         console.log('Share cancelled');
       }
     }
   };
 
-  // ✅ FIXED: Check if navigator.share exists (not await it)
   const hasNativeShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="lg">
-      <ModalOverlay />
+    <Modal isOpen={isOpen} onClose={onClose} size="xl" isCentered>
+      <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent>
-        <ModalHeader>
+        <ModalHeader borderBottom="1px" borderColor="gray.200">
           <VStack align="start" spacing={1}>
             <HStack>
-              <Icon as={FiShare2} />
+              <Icon as={FiShare2} color="green.500" boxSize={5} />
               <Text>Share Project</Text>
             </HStack>
             <Text fontSize="sm" fontWeight="normal" color="gray.600">
-              Help this project reach more investors
+              Help attract investors to this project
             </Text>
           </VStack>
         </ModalHeader>
         <ModalCloseButton />
         
-        <ModalBody pb={6}>
+        <ModalBody py={6}>
           <VStack spacing={6} align="stretch">
             {/* Project Preview Card */}
             <Box 
-              p={4} 
-              bg="gradient-to-r"
-              bgGradient="linear(to-r, green.50, blue.50)"
-              borderRadius="lg"
-              border="1px"
+              p={5} 
+              bgGradient="linear(to-br, green.50, blue.50)"
+              borderRadius="xl"
+              border="2px"
               borderColor="green.200"
+              shadow="sm"
             >
-              <VStack spacing={3} align="start">
+              <VStack spacing={4} align="start">
                 <HStack justify="space-between" w="full">
-                  <Text fontSize="lg" fontWeight="bold" color="gray.800">
-                    {project.name}
+                  <Text fontSize="lg" fontWeight="bold" color="gray.800" noOfLines={1}>
+                    {project.title}
                   </Text>
-                  <Badge colorScheme="green" fontSize="xs">
-                    {project.status}
+                  <Badge colorScheme="green" fontSize="xs" px={3} py={1}>
+                    {project.status.replace('_', ' ').toUpperCase()}
                   </Badge>
                 </HStack>
                 
-                <Text fontSize="sm" color="gray.700" noOfLines={2}>
+                <Text fontSize="sm" color="gray.700" noOfLines={3}>
                   {project.description}
                 </Text>
                 
-                <SimpleGrid columns={2} spacing={3} w="full" fontSize="xs">
-                  <HStack>
-                    <Text color="gray.600">📍</Text>
-                    <Text color="gray.700">{project.location}</Text>
-                  </HStack>
-                  <HStack>
-                    <Text color="gray.600">💰</Text>
-                    <Text color="gray.700">{project.progress}% funded</Text>
-                  </HStack>
-                  <HStack>
-                    <Text color="gray.600">🌾</Text>
-                    <Text color="gray.700">{project.expectedHarvest}</Text>
-                  </HStack>
-                  <HStack>
-                    <Text color="gray.600">👥</Text>
-                    <Text color="gray.700">{project.investors} investors</Text>
-                  </HStack>
+                <Divider borderColor="green.200" />
+                
+                <SimpleGrid columns={2} spacing={4} w="full" fontSize="sm">
+                  <VStack align="start" spacing={1}>
+                    <Text color="gray.500" fontSize="xs">Location</Text>
+                    <HStack>
+                      <Text>📍</Text>
+                      <Text fontWeight="medium">{project.location}</Text>
+                    </HStack>
+                  </VStack>
+                  
+                  <VStack align="start" spacing={1}>
+                    <Text color="gray.500" fontSize="xs">Progress</Text>
+                    <HStack>
+                      <Text>💰</Text>
+                      <Text fontWeight="medium" color="green.600">
+                        {Math.round(progress)}% funded
+                      </Text>
+                    </HStack>
+                  </VStack>
+                  
+                  <VStack align="start" spacing={1}>
+                    <Text color="gray.500" fontSize="xs">Timeline</Text>
+                    <HStack>
+                      <Text>🌾</Text>
+                      <Text fontWeight="medium">{project.timeline}</Text>
+                    </HStack>
+                  </VStack>
+                  
+                  <VStack align="start" spacing={1}>
+                    <Text color="gray.500" fontSize="xs">Backers</Text>
+                    <HStack>
+                      <Text>👥</Text>
+                      <Text fontWeight="medium">{project.contributorsCount}</Text>
+                    </HStack>
+                  </VStack>
                 </SimpleGrid>
+                
+                <Box w="full" pt={2}>
+                  <HStack justify="space-between" fontSize="xs" color="gray.600" mb={1}>
+                    <Text>{formatCurrency(project.currentFunding)}</Text>
+                    <Text>{formatCurrency(project.fundingGoal)}</Text>
+                  </HStack>
+                  <Box w="full" h="6px" bg="white" borderRadius="full" overflow="hidden">
+                    <Box 
+                      h="full" 
+                      w={`${Math.min(progress, 100)}%`}
+                      bg="green.400"
+                      transition="width 0.3s"
+                    />
+                  </Box>
+                </Box>
               </VStack>
             </Box>
 
             {/* Copy Link Section */}
             <FormControl>
-              <FormLabel fontSize="sm" fontWeight="medium">Project Link</FormLabel>
+              <FormLabel fontSize="sm" fontWeight="semibold" color="gray.700">
+                Project Link
+              </FormLabel>
               <InputGroup size="md">
                 <Input 
                   value={shareUrl} 
                   isReadOnly 
                   bg="gray.50"
-                  pr="4.5rem"
+                  border="1px"
+                  borderColor="gray.300"
+                  _focus={{ borderColor: 'green.400', bg: 'white' }}
+                  pr="5rem"
+                  fontSize="sm"
                 />
-                <InputRightElement width="4.5rem">
+                <InputRightElement width="5rem" pr={1}>
                   <Button 
-                    h="1.75rem" 
-                    size="sm" 
+                    size="sm"
                     onClick={handleCopyLink}
                     colorScheme={copied ? "green" : "blue"}
-                    leftIcon={<FiCopy />}
+                    leftIcon={copied ? <FiCheckCircle /> : <FiCopy />}
+                    fontSize="xs"
                   >
-                    {copied ? "✓" : "Copy"}
+                    {copied ? "Copied" : "Copy"}
                   </Button>
                 </InputRightElement>
               </InputGroup>
@@ -274,8 +298,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
             <Divider />
 
             {/* Social Share Buttons */}
-            <VStack spacing={3} align="stretch">
-              <Text fontSize="sm" fontWeight="medium" color="gray.700">
+            <VStack spacing={4} align="stretch">
+              <Text fontSize="sm" fontWeight="semibold" color="gray.700">
                 Share on Social Media
               </Text>
               
@@ -285,7 +309,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="whatsapp"
                   variant="outline"
                   onClick={handleWhatsAppShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'whatsapp.50' }}
                 >
                   WhatsApp
                 </Button>
@@ -295,7 +320,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="twitter"
                   variant="outline"
                   onClick={handleTwitterShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'twitter.50' }}
                 >
                   Twitter
                 </Button>
@@ -305,7 +331,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="facebook"
                   variant="outline"
                   onClick={handleFacebookShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'facebook.50' }}
                 >
                   Facebook
                 </Button>
@@ -315,7 +342,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="linkedin"
                   variant="outline"
                   onClick={handleLinkedInShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'linkedin.50' }}
                 >
                   LinkedIn
                 </Button>
@@ -325,7 +353,8 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="telegram"
                   variant="outline"
                   onClick={handleTelegramShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'telegram.50' }}
                 >
                   Telegram
                 </Button>
@@ -335,40 +364,40 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
                   colorScheme="purple"
                   variant="outline"
                   onClick={handleEmailShare}
-                  size="sm"
+                  size="md"
+                  _hover={{ bg: 'purple.50' }}
                 >
                   Email
                 </Button>
               </SimpleGrid>
 
-              {/* Native Share API (Mobile) - ✅ FIXED */}
               {hasNativeShare && (
-                <>
-                  <Divider />
-                  <Button
-                    leftIcon={<FiShare2 />}
-                    colorScheme="brand"
-                    onClick={handleNativeShare}
-                    size="sm"
-                  >
-                    More Share Options
-                  </Button>
-                </>
+                <Button
+                  leftIcon={<FiShare2 />}
+                  colorScheme="green"
+                  onClick={handleNativeShare}
+                  size="md"
+                  variant="solid"
+                >
+                  More Share Options
+                </Button>
               )}
             </VStack>
 
             {/* Tips */}
-            <Box p={3} bg="blue.50" borderRadius="md" fontSize="xs">
-              <Text color="blue.800" fontWeight="medium" mb={1}>
-                💡 Sharing Tips
-              </Text>
-              <Text color="blue.700">
-                • Share with potential investors in your network
-                <br />
-                • Post on farming and investment communities
-                <br />
-                • Tag relevant organizations and influencers
-              </Text>
+            <Box p={4} bg="blue.50" borderRadius="lg" border="1px" borderColor="blue.200">
+              <HStack spacing={2} mb={2}>
+                <Text fontSize="lg">💡</Text>
+                <Text color="blue.800" fontWeight="semibold" fontSize="sm">
+                  Sharing Tips
+                </Text>
+              </HStack>
+              <VStack align="start" spacing={1} fontSize="xs" color="blue.700">
+                <Text>• Share with potential investors in your network</Text>
+                <Text>• Post on farming and investment communities</Text>
+                <Text>• Tag relevant organizations for more visibility</Text>
+                <Text>• Share progress updates to keep backers engaged</Text>
+              </VStack>
             </Box>
           </VStack>
         </ModalBody>
