@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AuthModule } from "./auth/auth.module";
 import { CloudinaryModule } from "./cloudinary/cloudinary.module";
+import { ContributionModule } from "./contribution/contribution.module";
 import { EmailModule } from "./email/email.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { UploadModule } from "./upload/upload.module";
@@ -43,6 +44,7 @@ import { UsersModule } from "./users/users.module";
     ProjectsModule,
     CloudinaryModule,
     UploadModule,
+    ContributionModule,
   ],
   controllers: [],
   providers: [],
