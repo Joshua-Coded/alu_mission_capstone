@@ -35,27 +35,52 @@ export class ProjectsService {
       .exec();
   }
 
-  async findByFarmer(farmerId: string, status?: string): Promise<ProjectDocument[]> {
-    const query: any = { 
-      farmer: new Types.ObjectId(farmerId) 
-    };
-    
-    if (status) {
-      query.status = status;
-    }
+  // ✅ FIXED
+
+async findByFarmer(farmerId: string, status?: string): Promise<ProjectDocument[]> {
+  this.logger.log('=== FIND BY FARMER ===');
+  this.logger.log(`Farmer ID: ${farmerId}`);
   
-    console.log('🔍 Finding projects for farmer:', farmerId);
-    console.log('   Query:', query);
-  
-    const projects = await this.projectModel
-      .find(query)
-      .sort({ createdAt: -1 })
-      .exec();
-      
-    console.log('✅ Found', projects.length, 'projects');
-    
-    return projects;
+  if (!farmerId || farmerId === 'undefined' || farmerId === 'null') {
+    this.logger.error('Invalid farmer ID');
+    return [];
   }
+  
+  // Build query that works for BOTH string and ObjectId
+  const query: any = {
+    $or: [
+      { farmer: farmerId }, // If stored as string
+      { farmer: Types.ObjectId.isValid(farmerId) ? new Types.ObjectId(farmerId) : null }, // If stored as ObjectId
+    ]
+  };
+  
+  if (status) {
+    query.status = status;
+  }
+
+  const projects = await this.projectModel
+    .find(query)
+    .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+    .populate('dueDiligence.assignedTo', 'firstName lastName email')
+    .populate('verification.verifiedBy', 'firstName lastName email')
+    .sort({ createdAt: -1 })
+    .exec();
+  
+  this.logger.log(`✅ Found ${projects.length} projects`);
+  
+  // DEBUG: If no projects found, check what's in DB
+  if (projects.length === 0) {
+    this.logger.warn('No projects found. Checking database...');
+    const sample = await this.projectModel.findOne({}).select('farmer').lean().exec();
+    if (sample) {
+      this.logger.warn(`Sample farmer field type: ${typeof sample.farmer}`);
+      this.logger.warn(`Sample farmer value: ${sample.farmer}`);
+    }
+  }
+  
+  return projects;
+}
+
   async findOne(id: string): Promise<ProjectDocument> {
     const project = await this.projectModel
       .findById(id)
@@ -64,46 +89,30 @@ export class ProjectsService {
       .populate('verification.verifiedBy', 'firstName lastName email')
       .exec();
 
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
+    if (!project) throw new NotFoundException('Project not found');
     return project;
   }
 
   async update(id: string, updateProjectDto: UpdateProjectDto): Promise<ProjectDocument> {
     const project = await this.projectModel
-      .findByIdAndUpdate(
-        id,
-        { $set: updateProjectDto },
-        { new: true }
-      )
+      .findByIdAndUpdate(id, { $set: updateProjectDto }, { new: true, runValidators: true })
+      .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
       .exec();
 
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
+    if (!project) throw new NotFoundException('Project not found');
     return project;
   }
 
   async remove(id: string): Promise<{ message: string }> {
     const result = await this.projectModel.findByIdAndDelete(id).exec();
-
-    if (!result) {
-      throw new NotFoundException('Project not found');
-    }
-
+    if (!result) throw new NotFoundException('Project not found');
+    await this.favoriteModel.deleteMany({ project: id }).exec();
     return { message: 'Project deleted successfully' };
   }
 
-  // ==================== GOVERNMENT METHODS ====================
-
   async findPendingProjects(): Promise<ProjectDocument[]> {
     return this.projectModel
-      .find({ 
-        status: { $in: ['submitted', 'under_review'] }
-      })
+      .find({ status: { $in: ['submitted', 'under_review'] } })
       .populate('farmer', 'firstName lastName email phoneNumber location')
       .populate('dueDiligence.assignedTo', 'firstName lastName email department')
       .sort({ createdAt: 1 })
@@ -112,11 +121,9 @@ export class ProjectsService {
 
   async getMyAssignedProjects(officialId: string): Promise<ProjectDocument[]> {
     return this.projectModel
-      .find({ 
-        'dueDiligence.assignedTo': officialId,
-        status: { $in: ['under_review', 'active'] }
-      })
+      .find({ 'dueDiligence.assignedTo': new Types.ObjectId(officialId), status: { $in: ['under_review', 'active'] } })
       .populate('farmer', 'firstName lastName email phoneNumber location')
+      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
       .sort({ 'dueDiligence.startedAt': -1 })
       .exec();
   }
@@ -128,483 +135,191 @@ export class ProjectsService {
         {
           $set: {
             status: 'under_review',
-            'dueDiligence.assignedTo': officialId,
+            'dueDiligence.assignedTo': new Types.ObjectId(officialId),
             'dueDiligence.status': 'in_progress',
             'dueDiligence.startedAt': new Date(),
           },
         },
-        { new: true }
-      )
-      .exec();
-
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
-    return project;
-  }
-  
-
-  private createDocumentHash(data: any): string {
-    return createHash('sha256').update(JSON.stringify(data)).digest('hex');
-  }
-
-  // ==================== CONTRIBUTOR METHODS ====================
-
-  async findVerifiedProjects(category?: string, location?: string): Promise<ProjectDocument[]> {
-    const query: any = {
-      status: { $in: ['active', 'verified'] },
-    };
-
-    if (category) {
-      query.category = category;
-    }
-
-    if (location) {
-      query.location = new RegExp(location, 'i');
-    }
-
-    return this.projectModel
-      .find(query)
-      .populate('farmer', 'firstName lastName location profileImage')
-      .select('-dueDiligence -verification.documentHash')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  async addToFavorites(userId: string, projectId: string): Promise<{ message: string }> {
-    // Check if project exists
-    const project = await this.projectModel.findById(projectId);
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
-
-    // Check if already favorited
-    const existingFavorite = await this.favoriteModel.findOne({
-      user: userId,
-      project: projectId,
-    });
-
-    if (existingFavorite) {
-      throw new BadRequestException('Project already in favorites');
-    }
-
-    // Add to favorites
-    await this.favoriteModel.create({
-      user: userId,
-      project: projectId,
-    });
-
-    return { message: 'Project added to favorites' };
-  }
-
-  async removeFromFavorites(userId: string, projectId: string): Promise<{ message: string }> {
-    const result = await this.favoriteModel.findOneAndDelete({
-      user: userId,
-      project: projectId,
-    });
-
-    if (!result) {
-      throw new NotFoundException('Favorite not found');
-    }
-
-    return { message: 'Project removed from favorites' };
-  }
-
-  async getFavorites(userId: string): Promise<ProjectDocument[]> {
-    const favorites = await this.favoriteModel
-      .find({ user: userId })
-      .populate({
-        path: 'project',
-        populate: {
-          path: 'farmer',
-          select: 'firstName lastName location profileImage',
-        },
-      })
-      .sort({ createdAt: -1 })
-      .exec();
-
-    return favorites.map((fav: any) => fav.project).filter(Boolean);
-  }
-
-  async isFavorite(userId: string, projectId: string): Promise<boolean> {
-    const favorite = await this.favoriteModel.findOne({
-      user: userId,
-      project: projectId,
-    });
-    return !!favorite;
-  }
-
-  // ==================== STATS METHODS ====================
-
-  async getStats(): Promise<any> {
-    const pipeline = [
-      { $group: { 
-        _id: null,
-        totalProjects: { $sum: 1 },
-        totalFunding: { $sum: '$fundingGoal' },
-        pendingReview: { $sum: { $cond: [{ $eq: ['$status', 'submitted'] }, 1, 0] } },
-        activeProjects: { $sum: { $cond: [{ $in: ['$status', ['active', 'under_review']] }, 1, 0] } },
-        fundedProjects: { $sum: { $cond: [{ $eq: ['$status', 'funded'] }, 1, 0] } },
-        rejectedProjects: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
-        avgProcessingDays: { 
-          $avg: { 
-            $divide: [
-              { $subtract: ['$updatedAt', '$createdAt'] },
-              (1000 * 60 * 60 * 24)
-            ]
-          }
-        }
-      } }
-    ];
-
-    const result = await this.projectModel.aggregate(pipeline).exec();
-    const stats = result[0] || {};
-
-    return {
-      totalProjects: stats.totalProjects || 0,
-      pendingReview: stats.pendingReview || 0,
-      activeProjects: stats.activeProjects || 0,
-      fundedProjects: stats.fundedProjects || 0,
-      rejectedProjects: stats.rejectedProjects || 0,
-      totalFunding: Math.round(stats.totalFunding || 0),
-      averageProcessingTime: `${Math.round(stats.avgProcessingDays || 0)} days`,
-    };
-  }
-
-  // ==================== DEPARTMENT-BASED METHODS ====================
-
-  async updateProjectDepartment(projectId: string, department: GovernmentDepartment): Promise<ProjectDocument> {
-    const project = await this.projectModel
-      .findByIdAndUpdate(
-        projectId,
-        { $set: { department } },
-        { new: true }
+        { new: true, runValidators: true }
       )
       .populate('farmer', 'firstName lastName email phoneNumber location')
       .populate('dueDiligence.assignedTo', 'firstName lastName email department')
       .exec();
-  
-    if (!project) {
-      throw new NotFoundException('Project not found after department update');
-    }
-  
+
+    if (!project) throw new NotFoundException('Project not found');
     return project;
   }
-
-  async findByDepartment(department: GovernmentDepartment): Promise<ProjectDocument[]> {
-    return this.projectModel
-      .find({ 
-        department,
-        status: { $in: ['submitted', 'under_review'] }
-      })
-      .populate('farmer', 'firstName lastName email phoneNumber location')
-      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
-      .populate('verification.verifiedBy', 'firstName lastName email')
-      .sort({ createdAt: 1 })
-      .exec();
-  }
+  
   async create(createProjectDto: CreateProjectDto, farmerId: string): Promise<ProjectDocument> {
-    console.log('=== PROJECT CREATION START ===');
-    console.log('Farmer ID:', farmerId);
+    const projectId = randomUUID();
     
-    try {
-      const farmerObjectId = new Types.ObjectId(farmerId);
-      
-      const projectData = {
-        ...createProjectDto,
-        projectId: randomUUID(),
-        farmer: farmerObjectId,
-        status: 'submitted',
-        currentFunding: 0,
-        contributorsCount: 0,
-        department: GovernmentDepartment.GENERAL,
-        submittedAt: new Date(),
-        dueDiligence: {
-          status: 'pending' as const,
-          notes: '',
-          documents: [],
-        },
-        verification: {},
-        blockchainStatus: 'not_created', // Add blockchain status
-      };
-  
-      console.log('Project data to save:', projectData);
-  
-      const project = new this.projectModel(projectData);
-      const savedProject = await project.save();
-      
-      console.log('=== PROJECT CREATION SUCCESS ===');
-      console.log('Saved project ID:', savedProject._id);
-      
-      // Auto-create on blockchain after saving (non-blocking)
-      this.createBlockchainProject(savedProject).catch(error => {
-        this.logger.error('Background blockchain creation failed:', error);
-      });
-      
-      return savedProject;
-    } catch (error) {
-      console.log('=== PROJECT CREATION ERROR ===');
-      console.error('Error details:', error);
-      throw new BadRequestException(error.message || 'Internal server error');
+    // Get farmer's wallet address
+    const farmer = await this.usersService.findById(farmerId);
+    
+    if (!farmer.walletAddress) {
+      throw new BadRequestException(
+        'You must connect your wallet before creating a project. Please connect your MetaMask wallet in your profile settings.'
+      );
     }
-  }
-
-
-  // Get all projects for government dashboard with department info
-  async getAllProjectsForGovernment(): Promise<ProjectDocument[]> {
-    return this.projectModel
-      .find({})
-      .populate('farmer', 'firstName lastName email phoneNumber location')
-      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
-      .populate('verification.verifiedBy', 'firstName lastName email')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  // Get projects by status and department
-  async findProjectsByStatusAndDepartment(
-    status: string[], 
-    department?: GovernmentDepartment
-  ): Promise<ProjectDocument[]> {
-    const query: any = { status: { $in: status } };
-    
-    if (department) {
-      query.department = department;
+  
+    // Validate minimum funding goal (5 MATIC)
+    if (createProjectDto.fundingGoal < 5) {
+      throw new BadRequestException('Minimum funding goal is 5 MATIC');
     }
-
-    return this.projectModel
-      .find(query)
-      .populate('farmer', 'firstName lastName email phoneNumber location')
-      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  // Get department statistics
-  async getDepartmentStats(): Promise<any> {
-    const pipeline = [
-      {
-        $group: {
-          _id: '$department',
-          totalProjects: { $sum: 1 },
-          pendingReview: { 
-            $sum: { 
-              $cond: [{ $in: ['$status', ['submitted', 'under_review']] }, 1, 0] 
-            } 
-          },
-          approved: { 
-            $sum: { 
-              $cond: [{ $in: ['$status', ['active', 'verified', 'funded']] }, 1, 0] 
-            } 
-          },
-          rejected: { 
-            $sum: { 
-              $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] 
-            } 
-          },
-          totalFunding: { $sum: '$fundingGoal' }
-        }
-      },
-      {
-        $project: {
-          department: '$_id',
-          totalProjects: 1,
-          pendingReview: 1,
-          approved: 1,
-          rejected: 1,
-          totalFunding: 1,
-          _id: 0
-        }
-      }
-    ];
-
-    const result = await this.projectModel.aggregate(pipeline).exec();
-    return result || [];
-  }
-
-
-  private calculateMilestones(timeline: string): number {
-    // Convert timeline like "10 Months" to milestone count
-    const match = timeline.match(/(\d+)\s*(month|week|day)s?/i);
-    if (!match) return 3; // default
+  
+    this.logger.log('=== CREATE PROJECT ===');
+    this.logger.log(`Title: ${createProjectDto.title}`);
+    this.logger.log(`Funding Goal: ${createProjectDto.fundingGoal} MATIC`);
+    this.logger.log(`Farmer ID: ${farmerId}`);
+    this.logger.log(`Farmer Wallet: ${farmer.walletAddress}`);
+  
+    // Create project in database first
+    const newProject = new this.projectModel({
+      ...createProjectDto,
+      projectId,
+      farmer: farmerId,
+      farmerWalletAddress: farmer.walletAddress, // ✅ This is critical!
+      status: 'submitted',
+      submittedAt: new Date(),
+      currentFunding: 0,
+      contributorsCount: 0,
+      milestonesCompleted: 0,
+      totalMilestones: 0,
+      isBlockchainFunded: false,
+      blockchainProjectId: null,
+      blockchainStatus: 'pending',
+      blockchainTxHash: '',
+    });
+  
+    const savedProject = await newProject.save();
+  
+    this.logger.log(`✅ Project saved to database with ID: ${savedProject._id}`);
+  
+    // ✅ AUTO-DEPLOY TO BLOCKCHAIN (only after verification)
+    // Note: Deployment happens in verifyProject method, not here
     
-    const amount = parseInt(match[1]);
+    return savedProject;
+  }
+  // Helper method to parse timeline string to days
+  private parseTimelineToDays(timeline: string | number): number {
+    if (typeof timeline === 'number') {
+      return timeline;
+    }
+  
+    // Parse strings like "5 months", "18 Months", "30 days", etc.
+    const match = timeline.match(/(\d+)\s*(day|days|month|months|week|weeks|year|years)/i);
+    
+    if (!match) {
+      // Default to 30 days if can't parse
+      return 30;
+    }
+  
+    const value = parseInt(match[1]);
     const unit = match[2].toLowerCase();
-    
+  
     switch (unit) {
-      case 'month': return Math.min(amount, 6); // max 6 milestones
-      case 'week': return Math.min(Math.ceil(amount / 4), 6);
-      default: return 3;
+      case 'day':
+      case 'days':
+        return value;
+      case 'week':
+      case 'weeks':
+        return value * 7;
+      case 'month':
+      case 'months':
+        return value * 30;
+      case 'year':
+      case 'years':
+        return value * 365;
+      default:
+        return 30;
     }
   }
 
-  private async createBlockchainProject(project: ProjectDocument): Promise<void> {
+  async verifyProject(projectId: string, officialId: string, notes?: string): Promise<ProjectDocument> {
+    const project = await this.findOne(projectId);
+    
+    if (!['submitted', 'under_review'].includes(project.status)) {
+      throw new BadRequestException(`Cannot verify project with status: ${project.status}`);
+    }
+  
+    if (!project.farmerWalletAddress) {
+      throw new BadRequestException('Farmer must have a wallet address connected');
+    }
+  
+    const documentHash = this.createDocumentHash({
+      projectId: project.projectId,
+      documents: project.documents,
+      verifiedAt: new Date(),
+    });
+  
+    // ✅ DEPLOY TO BLOCKCHAIN WHEN VERIFIED
+    let blockchainProjectId: number | null = null;
+    let blockchainTxHash = '';
+    let blockchainStatus = 'pending';
+  
     try {
-      const farmer = await this.usersService.findById(project.farmer.toString());
+      this.logger.log('🚀 Deploying verified project to blockchain...');
       
-      if (!farmer?.walletAddress) {
-        this.logger.warn(`Farmer ${project.farmer} has no wallet address - skipping blockchain creation`);
-        return;
-      }
-  
-      // Convert timeline to days
-      const timelineDays = this.convertTimelineToDays(project.timeline);
-  
-      const blockchainData = {
+      const timelineInDays = this.parseTimelineToDays(project.timeline);
+      
+      const result = await this.blockchainService.createProjectOnChain({
         title: project.title,
-        description: project.description.substring(0, 500), // Limit description
+        description: project.description,
         fundingGoal: project.fundingGoal,
         category: project.category,
         location: project.location,
-        timeline: timelineDays,
-        farmerWallet: farmer.walletAddress,
-      };
-  
-      const result = await this.blockchainService.createProjectOnChain(blockchainData);
-  
-      // Update project with blockchain info
-      await this.projectModel.findByIdAndUpdate(project._id, {
-        blockchainProjectId: result.projectId,
-        blockchainStatus: 'created',
-        blockchainTxHash: result.txHash,
-        blockchainCreatedAt: new Date(),
+        timeline: timelineInDays,
+        farmerWallet: project.farmerWalletAddress,
       });
   
-      this.logger.log(`Project ${project._id} created on blockchain with ID: ${result.projectId}`);
-    } catch (error) {
-      // Mark as failed but don't block the project creation
-      await this.projectModel.findByIdAndUpdate(project._id, {
-        blockchainStatus: 'failed',
-      });
-      
-      this.logger.error(`Failed to create blockchain entry for project ${project._id}:`, error);
-      // Don't throw error - project can exist without blockchain initially
+      blockchainProjectId = result.projectId;
+      blockchainTxHash = result.txHash;
+      blockchainStatus = 'created';
+  
+      this.logger.log(`✅ Blockchain deployment successful!`);
+      this.logger.log(`   - Blockchain Project ID: ${blockchainProjectId}`);
+      this.logger.log(`   - Transaction Hash: ${blockchainTxHash}`);
+      this.logger.log(`   - Farmer Wallet: ${project.farmerWalletAddress}`);
+    } catch (error: any) {
+      this.logger.error(`❌ Blockchain deployment failed: ${error.message}`);
+      blockchainStatus = 'failed';
     }
-  }
   
+    // Update project with verification AND blockchain info
+    const updatedProject = await this.projectModel
+      .findByIdAndUpdate(
+        projectId,
+        {
+          $set: {
+            status: 'active',
+            'verification.verifiedBy': new Types.ObjectId(officialId),
+            'verification.verifiedAt': new Date(),
+            'verification.documentHash': documentHash,
+            'verification.notes': notes || '',
+            'dueDiligence.status': 'completed',
+            'dueDiligence.completedAt': new Date(),
+            blockchainProjectId: blockchainProjectId,
+            blockchainStatus: blockchainStatus,
+            blockchainTxHash: blockchainTxHash,
+          },
+        },
+        { new: true, runValidators: true }
+      )
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .exec();
   
-  private convertTimelineToDays(timeline: string): number {
-    const match = timeline.match(/(\d+)\s*(month|week|day)s?/i);
-    if (!match) return 90; // default 90 days
-    
-    const amount = parseInt(match[1]);
-    const unit = match[2].toLowerCase();
-    
-    switch (unit) {
-      case 'month': return amount * 30;
-      case 'week': return amount * 7;
-      case 'day': return amount;
-      default: return 90;
-    }
-  }  
-
- // Check and update project completion status
-async checkAndUpdateProjectCompletion(projectId: string): Promise<ProjectDocument> {
-  const project = await this.findOne(projectId);
-  
-  if (!project.blockchainProjectId || project.blockchainStatus !== 'created') {
-    throw new BadRequestException('Project not on blockchain or blockchain creation failed');
-  }
-
-  if (project.status === 'funded') {
-    return project; // Already funded
-  }
-
-  // Check blockchain for funding status
-  const blockchainStatus = await this.blockchainService.checkProjectCompletion(
-    project.blockchainProjectId
-  );
-
-  // Update local database if funded on blockchain
-  if (blockchainStatus.isFunded && !project.isBlockchainFunded) {
-    const updatedProject = await this.projectModel.findByIdAndUpdate(
-      projectId,
-      {
-        status: 'funded',
-        isBlockchainFunded: true,
-        blockchainFundedAt: new Date(),
-        currentFunding: parseFloat(blockchainStatus.totalFunding),
-      },
-      { new: true }
-    );
-
     if (!updatedProject) {
-      throw new NotFoundException('Project not found after funding update');
+      throw new NotFoundException('Project not found after update');
     }
-
-    this.logger.log(`Project ${projectId} marked as funded from blockchain`);
+  
+    this.logger.log(`✅ PROJECT VERIFIED AND DEPLOYED: ${updatedProject.title}`);
+    
     return updatedProject;
   }
 
-  return project;
-}
-
-async verifyProject(projectId: string, officialId: string, notes?: string): Promise<ProjectDocument> {
-  this.logger.log(`🔍 Starting verification for project ${projectId}`);
-  
-  const project = await this.findOne(projectId);
-  
-  this.logger.log(`📋 Project current status: ${project.status}`);
-
-  // FIX: Allow verification from BOTH 'submitted' AND 'under_review'
-  if (!['submitted', 'under_review'].includes(project.status)) {
-    this.logger.error(`❌ Cannot verify project with status: ${project.status}`);
-    throw new BadRequestException(
-      `Cannot verify project with status '${project.status}'. Project must be 'submitted' or 'under_review'.`
-    );
-  }
-
-  this.logger.log(`✅ Status check passed. Proceeding with verification...`);
-
-  // Create document hash
-  const documentHash = this.createDocumentHash({
-    projectId: project.projectId,
-    documents: project.documents,
-    dueDiligenceNotes: project.dueDiligence?.notes || '',
-    verifiedAt: new Date(),
-  });
-
-  this.logger.log(`📝 Document hash created: ${documentHash.substring(0, 16)}...`);
-  this.logger.log(`✅ Updating project to 'active' status...`);
-
-  const updatedProject = await this.projectModel
-    .findByIdAndUpdate(
-      projectId,
-      {
-        $set: {
-          status: 'active', // This makes it show in farmer dashboard!
-          'verification.verifiedBy': officialId,
-          'verification.verifiedAt': new Date(),
-          'verification.documentHash': documentHash,
-          'dueDiligence.status': 'completed', // Mark due diligence as done
-          'dueDiligence.completedAt': new Date(),
-        },
-      },
-      { new: true }
-    )
-    .populate('farmer', 'firstName lastName email phoneNumber location')
-    .populate('verification.verifiedBy', 'firstName lastName email')
-    .exec();
-
-  if (!updatedProject) {
-    this.logger.error(`❌ Project not found after update: ${projectId}`);
-    throw new NotFoundException('Project not found after update');
-  }
-
-  this.logger.log(`✅ PROJECT VERIFIED SUCCESSFULLY!`);
-  this.logger.log(`   - Project ID: ${projectId}`);
-  this.logger.log(`   - Title: ${updatedProject.title}`);
-  this.logger.log(`   - New Status: ${updatedProject.status}`);
-  this.logger.log(`   - Verified By: ${officialId}`);
-  this.logger.log(`   - Verified At: ${updatedProject.verification.verifiedAt}`);
-
-  return updatedProject;
-}
-  
   async rejectProject(projectId: string, officialId: string, reason: string): Promise<ProjectDocument> {
     const project = await this.findOne(projectId);
-  
     if (!['submitted', 'under_review'].includes(project.status)) {
       throw new BadRequestException('Can only reject submitted or under review projects');
     }
@@ -615,201 +330,228 @@ async verifyProject(projectId: string, officialId: string, notes?: string): Prom
         {
           $set: {
             status: 'rejected',
-            'verification.verifiedBy': officialId,
+            'verification.verifiedBy': new Types.ObjectId(officialId),
             'verification.verifiedAt': new Date(),
             'verification.rejectionReason': reason,
           },
         },
-        { new: true }
+        { new: true, runValidators: true }
       )
+      .populate('farmer', 'firstName lastName email phoneNumber location')
+      .populate('verification.verifiedBy', 'firstName lastName email')
       .exec();
   
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found after update');
-    }
-  
+    if (!updatedProject) throw new NotFoundException('Project not found after update');
     return updatedProject;
   }
   
-  async updateDueDiligence(
-    projectId: string,
-    officialId: string,
-    updateDto: UpdateDueDiligenceDto,
-  ): Promise<ProjectDocument> {
+  async updateDueDiligence(projectId: string, officialId: string, updateDto: UpdateDueDiligenceDto): Promise<ProjectDocument> {
     const project = await this.findOne(projectId);
-  
     const updateData: any = {};
     
-    if (updateDto.notes) {
-      updateData['dueDiligence.notes'] = updateDto.notes;
-    }
-    
+    if (updateDto.notes !== undefined) updateData['dueDiligence.notes'] = updateDto.notes;
     if (updateDto.status) {
       updateData['dueDiligence.status'] = updateDto.status;
-      if (updateDto.status === 'completed') {
-        updateData['dueDiligence.completedAt'] = new Date();
-      }
+      if (updateDto.status === 'completed') updateData['dueDiligence.completedAt'] = new Date();
     }
-    
-    if (updateDto.documents) {
+    if (updateDto.documents && updateDto.documents.length > 0) {
       updateData['dueDiligence.documents'] = [
-        ...(project.dueDiligence.documents || []),
-        ...updateDto.documents.map(doc => ({
-          ...doc,
-          uploadedAt: new Date(),
-        })),
+        ...(project.dueDiligence?.documents || []),
+        ...updateDto.documents.map(doc => ({ ...doc, uploadedAt: new Date() })),
       ];
     }
   
     const updatedProject = await this.projectModel
-      .findByIdAndUpdate(projectId, { $set: updateData }, { new: true })
+      .findByIdAndUpdate(projectId, { $set: updateData }, { new: true, runValidators: true })
       .populate('farmer', 'firstName lastName email phoneNumber location')
       .populate('dueDiligence.assignedTo', 'firstName lastName email')
       .exec();
   
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found after update');
-    }
-  
-    return updatedProject;
-  }
-  
-  // Complete project on blockchain when goals are met
-  async completeProject(projectId: string, officialId: string): Promise<ProjectDocument> {
-    const project = await this.findOne(projectId);
-  
-    if (project.status !== 'funded') {
-      throw new BadRequestException('Only funded projects can be completed');
-    }
-  
-    if (!project.blockchainProjectId) {
-      throw new BadRequestException('Project not on blockchain');
-    }
-  
-    // Mark as completed on blockchain
-    const result = await this.blockchainService.completeProjectOnChain(project.blockchainProjectId);
-  
-    // Update local project status
-    const updatedProject = await this.projectModel.findByIdAndUpdate(
-      projectId,
-      {
-        status: 'closed',
-        'verification.verifiedBy': officialId,
-        'verification.verifiedAt': new Date(),
-        'verification.blockchainTxHash': result.txHash,
-      },
-      { new: true }
-    );
-  
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found after completion');
-    }
-  
-    return updatedProject;
-  }
-  
-  /**
-   * Complete project on blockchain
-   */
-  async completeProjectOnBlockchain(projectId: string, officialId: string): Promise<ProjectDocument> {
-    const project = await this.findOne(projectId);
-  
-    if (!project.blockchainProjectId) {
-      throw new BadRequestException('Project not on blockchain');
-    }
-  
-    if (project.status !== 'active') {
-      throw new BadRequestException('Only active projects can be completed');
-    }
-  
-    // Complete on blockchain
-    const result = await this.blockchainService.completeProjectOnChain(project.blockchainProjectId);
-  
-    // Update local project
-    const updatedProject = await this.projectModel.findByIdAndUpdate(
-      projectId,
-      {
-        status: 'closed',
-        'verification.verifiedBy': officialId,
-        'verification.verifiedAt': new Date(),
-        'verification.blockchainTxHash': result.txHash,
-      },
-      { new: true }
-    );
-  
-    if (!updatedProject) {
-      throw new NotFoundException('Project not found after blockchain completion');
-    }
-  
+    if (!updatedProject) throw new NotFoundException('Project not found after update');
     return updatedProject;
   }
 
-  // Background job to sync blockchain status
+
+async recordContribution(projectId: string, contributorId: string, amount: number, walletAddress: string, txHash: string): Promise<ProjectDocument> {
+  this.logger.log(`💰 RECORD CONTRIBUTION: ${amount} MATIC to ${projectId} from ${contributorId}`);
+  
+  const project = await this.findOne(projectId);
+  
+  if (project.status !== 'active') {
+    throw new BadRequestException('Can only contribute to active projects');
+  }
+  
+  if (amount <= 0) {
+    throw new BadRequestException('Amount must be greater than 0');
+  }
+
+  // ✅ FIXED: Use the correct schema fields
+  const updatedProject = await this.projectModel
+    .findByIdAndUpdate(
+      projectId,
+      {
+        $inc: { 
+          currentFunding: amount,
+          contributorsCount: 1  // Increment unique contributor count
+        }
+      },
+      { new: true, runValidators: true }
+    )
+    .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+    .exec();
+
+  if (!updatedProject) {
+    throw new NotFoundException('Project not found after contribution');
+  }
+
+  this.logger.log(`✅ Project stats updated: 
+    - Current Funding: ${updatedProject.currentFunding} MATIC
+    - Contributors: ${updatedProject.contributorsCount}
+    - Progress: ${((updatedProject.currentFunding / updatedProject.fundingGoal) * 100).toFixed(1)}%
+  `);
+
+  return updatedProject;
+}
+
+  async findVerifiedProjects(category?: string, location?: string): Promise<ProjectDocument[]> {
+    const query: any = { status: 'active' };
+    if (category) query.category = category;
+    if (location) query.location = new RegExp(location, 'i');
+    return this.projectModel
+      .find(query)
+      .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async addToFavorites(userId: string, projectId: string): Promise<{ message: string }> {
+    await this.findOne(projectId);
+    const existing = await this.favoriteModel.findOne({ user: new Types.ObjectId(userId), project: new Types.ObjectId(projectId) });
+    if (existing) return { message: 'Already in favorites' };
+    await this.favoriteModel.create({ user: new Types.ObjectId(userId), project: new Types.ObjectId(projectId) });
+    return { message: 'Added to favorites' };
+  }
+
+  async removeFromFavorites(userId: string, projectId: string): Promise<{ message: string }> {
+    await this.favoriteModel.deleteOne({ user: new Types.ObjectId(userId), project: new Types.ObjectId(projectId) });
+    return { message: 'Removed from favorites' };
+  }
+
+  // ✅ FIXED
+  async getFavorites(userId: string): Promise<ProjectDocument[]> {
+    const favorites = await this.favoriteModel
+      .find({ user: new Types.ObjectId(userId) })
+      .populate({ path: 'project', populate: { path: 'farmer', select: 'firstName lastName email phoneNumber location profileImage' } })
+      .exec();
+    return favorites.filter(fav => fav.project != null).map(fav => fav.project) as unknown as ProjectDocument[];
+  }
+
+  async isFavorite(userId: string, projectId: string): Promise<boolean> {
+    const favorite = await this.favoriteModel.findOne({ user: new Types.ObjectId(userId), project: new Types.ObjectId(projectId) });
+    return !!favorite;
+  }
+
+  async getStats(): Promise<any> {
+    const totalProjects = await this.projectModel.countDocuments();
+    const activeProjects = await this.projectModel.countDocuments({ status: 'active' });
+    const completedProjects = await this.projectModel.countDocuments({ status: 'closed' });
+    const fundingAgg = await this.projectModel.aggregate([
+      { $match: { status: { $in: ['active', 'closed'] } } },
+      { $group: { _id: null, totalFunding: { $sum: '$currentFunding' } } },
+    ]);
+    return { totalProjects, activeProjects, completedProjects, totalFunding: fundingAgg[0]?.totalFunding || 0 };
+  }
+
+  // ✅ NEW METHODS
+  async updateProjectDepartment(projectId: string, department: GovernmentDepartment): Promise<ProjectDocument> {
+    const project = await this.projectModel
+      .findByIdAndUpdate(projectId, { $set: { department } }, { new: true, runValidators: true })
+      .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+      .exec();
+    if (!project) throw new NotFoundException('Project not found');
+    this.logger.log(`✅ Project ${projectId} department updated to ${department}`);
+    return project;
+  }
+
+  async findByDepartment(department: GovernmentDepartment): Promise<ProjectDocument[]> {
+    return this.projectModel
+      .find({ department })
+      .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async getAllProjectsForGovernment(): Promise<ProjectDocument[]> {
+    return this.projectModel
+      .find()
+      .populate('farmer', 'firstName lastName email phoneNumber location profileImage')
+      .populate('dueDiligence.assignedTo', 'firstName lastName email department')
+      .populate('verification.verifiedBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
   async syncBlockchainStatus(projectId: string): Promise<void> {
     const project = await this.findOne(projectId);
-    
-    if (!project.blockchainProjectId || project.blockchainStatus !== 'created') {
-      return;
-    }
+    if (!project.blockchainProjectId && project.blockchainProjectId !== 0) return;
 
     try {
-      const blockchainStatus = await this.blockchainService.checkProjectCompletion(
-        project.blockchainProjectId
-      );
-
+      const blockchainInfo = await this.blockchainService.getProjectInfo(project.blockchainProjectId);
       const updates: any = {};
+      const totalFunding = parseFloat(blockchainInfo.totalFunding.toString());
 
-      // Update funding if changed
-      if (parseFloat(blockchainStatus.totalFunding) !== project.currentFunding) {
-        updates.currentFunding = parseFloat(blockchainStatus.totalFunding);
-      }
-
-      // Update completion status
-      if (blockchainStatus.isCompleted && project.status !== 'closed') {
+      if (totalFunding !== project.currentFunding) updates.currentFunding = totalFunding;
+      if (blockchainInfo.isCompleted && project.status !== 'closed') {
         updates.status = 'closed';
+        updates.completedAt = new Date();
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.projectModel.findByIdAndUpdate(projectId, updates);
+        await this.projectModel.findByIdAndUpdate(projectId, updates, { runValidators: true });
         this.logger.log(`Synced blockchain status for project ${projectId}`);
       }
     } catch (error) {
-      this.logger.error(`Failed to sync blockchain status for project ${projectId}:`, error);
+      this.logger.error(`Failed to sync blockchain status:`, error);
     }
   }
 
-  /**
- * Check blockchain status for a project
- */
-async getBlockchainStatus(projectId: string): Promise<any> {
-  const project = await this.findOne(projectId);
+  async getBlockchainStatus(projectId: string): Promise<any> {
+    const project = await this.findOne(projectId);
+    if (!project.blockchainProjectId && project.blockchainProjectId !== 0) {
+      return { blockchainEnabled: false, message: 'Project not on blockchain' };
+    }
+
+    try {
+      const blockchainInfo = await this.blockchainService.getProjectInfo(project.blockchainProjectId);
+      return {
+        blockchainEnabled: true,
+        projectId: project.blockchainProjectId,
+        isFunded: blockchainInfo.totalFunding >= blockchainInfo.fundingGoal,
+        isCompleted: blockchainInfo.isCompleted,
+        totalFunding: parseFloat(blockchainInfo.totalFunding.toString()),
+        fundingGoal: parseFloat(blockchainInfo.fundingGoal.toString()),
+        localFunding: project.currentFunding,
+        localStatus: project.status,
+        blockchainStatus: project.blockchainStatus
+      };
+    } catch (error) {
+      this.logger.error(`Failed to fetch blockchain status:`, error);
+      return {
+        blockchainEnabled: true,
+        projectId: project.blockchainProjectId,
+        error: 'Failed to fetch blockchain status',
+        localFunding: project.currentFunding,
+        localStatus: project.status,
+        blockchainStatus: project.blockchainStatus
+      };
+    }
+  }
+
+  private createDocumentHash(data: any): string {
+    return createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  }
+
   
-  if (!project.blockchainProjectId) {
-    return {
-      blockchainEnabled: false,
-      message: 'Project not on blockchain'
-    };
-  }
-
-  try {
-    const blockchainStatus = await this.blockchainService.checkProjectCompletion(project.blockchainProjectId);
-    
-    return {
-      blockchainEnabled: true,
-      projectId: project.blockchainProjectId,
-      ...blockchainStatus,
-      localFunding: project.currentFunding,
-      localStatus: project.status
-    };
-  } catch (error) {
-    return {
-      blockchainEnabled: true,
-      projectId: project.blockchainProjectId,
-      error: 'Failed to fetch blockchain status',
-      localFunding: project.currentFunding,
-      localStatus: project.status
-    };
-  }
-}
-
 }

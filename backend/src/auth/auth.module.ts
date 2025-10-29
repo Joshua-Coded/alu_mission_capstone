@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { JwtModule } from "@nestjs/jwt";
+import { JwtModule, JwtModuleOptions } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { EmailModule } from "../email/email.module";
 import { UsersModule } from "../users/users.module";
@@ -17,7 +17,7 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
+      useFactory: (configService: ConfigService): JwtModuleOptions => {
         const secret = configService.get<string>('JWT_SECRET');
         if (!secret || secret.length < 32) {
           throw new Error('JWT_SECRET must be at least 32 characters long');
@@ -25,8 +25,8 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
         return {
           secret,
           signOptions: {
-            expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '7d',
-          },
+            expiresIn: configService.get('JWT_EXPIRES_IN') || '7d',
+          } as any,
         };
       },
     }),

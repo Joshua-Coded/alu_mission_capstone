@@ -28,17 +28,17 @@ export class Contribution {
   blockchainProjectId: number;
 
   @Prop({ required: true })
-  contributorWallet: string;
+  farmerWalletAddress: string; // Where funds will go after completion
 
   @Prop({ required: true })
-  amountEth: number;
+  amountMatic: number;
 
   @Prop({ required: true })
   amountWei: string;
 
   // RWF conversion (at time of contribution)
   @Prop()
-  ethToRwfRate?: number;
+  maticToRwfRate?: number;
 
   @Prop()
   amountRwf?: number;
@@ -83,6 +83,7 @@ export class Contribution {
     projectTitle?: string;
     farmerName?: string;
     contributorName?: string;
+    anonymous?: boolean;
     notes?: string;
   };
 }

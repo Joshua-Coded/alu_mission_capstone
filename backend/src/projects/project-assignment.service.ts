@@ -4,6 +4,7 @@ import { Model } from "mongoose";
 import { GovernmentDepartment, ProjectCategory, User, UserDocument } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
 import { ProjectsService } from "./projects.service";
+import { ProjectDocument } from "./schemas/project.schema";
 
 @Injectable()
 export class ProjectAssignmentService {
@@ -70,7 +71,15 @@ export class ProjectAssignmentService {
   }
 
   // Get projects by department (for government officials)
-  async getProjectsByDepartment(department: GovernmentDepartment, officialId?: string) {
+  async getProjectsByDepartment(
+    department: GovernmentDepartment, 
+    officialId?: string
+  ): Promise<{
+    department: GovernmentDepartment;
+    totalProjects: number;
+    projects: ProjectDocument[];
+    message: string;
+  }> {
     this.logger.log(`📋 Getting projects for department: ${department}`);
     
     // Any official in this department can see ALL projects in their department

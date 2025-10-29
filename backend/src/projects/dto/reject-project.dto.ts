@@ -1,10 +1,13 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
-
-// src/projects/dto/reject-project.dto.ts
+import { IsNotEmpty, IsString, MaxLength } from "class-validator";
 
 export class RejectProjectDto {
-  @ApiProperty({ example: 'Incomplete documentation. Missing land ownership proof.' })
+  @ApiProperty({ 
+    example: 'Incomplete documentation. Missing land ownership proof.',
+    description: 'Reason for rejecting the project'
+  })
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
   reason: string;
 }

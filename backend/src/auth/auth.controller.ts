@@ -1,5 +1,4 @@
 import * as bcrypt from "bcryptjs";
-import { BadRequestException, Body, Controller, Get, Param, Post, Request, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
@@ -7,6 +6,29 @@ import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+
+import { 
+  BadRequestException, 
+  Body, 
+  Controller, 
+  Get, 
+  HttpException,
+  HttpStatus,
+  Param, 
+  Patch,
+  Post, 
+  Req,
+  Request, 
+  UseGuards 
+} from "@nestjs/common";
+
+interface RequestWithUser extends Request {
+  user: {
+    userId: string;
+    role: string;
+    email: string;
+  };
+}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -141,40 +163,72 @@ export class AuthController {
       }
     };
   }
-  @Post('update-wallet')
+
+  // ============= WALLET UPDATE ENDPOINT (PATCH) =============
+  @Patch('update-wallet')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update user wallet address' })
-  @ApiResponse({ status: 200, description: 'Wallet updated successfully' })
-  @ApiResponse({ status: 409, description: 'Wallet already exists' })
-  async updateWallet(
-    @Request() req,
-    @Body() body: { walletAddress: string }
+  @ApiOperation({ summary: 'Update user wallet address (Sepolia)' })
+  @ApiResponse({ status: 200, description: 'Wallet address updated' })
+  @ApiResponse({ status: 400, description: 'Invalid wallet address' })
+  @ApiResponse({ status: 409, description: 'Wallet already registered' })
+  async updateWalletAddress(
+    @Req() req: RequestWithUser,
+    @Body() body: { walletAddress: string },
   ) {
-    console.log('🔄 Updating wallet for user:', req.user.userId);
-    console.log('🔄 New wallet address:', body.walletAddress);
+    console.log('💼 Updating wallet for user:', req.user.userId);
+    console.log('💼 New wallet address:', body.walletAddress);
   
-    // ✅ FIXED: Call through authService
+    // Validate wallet address format
+    if (!body.walletAddress || !body.walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+      throw new HttpException('Invalid wallet address format', HttpStatus.BAD_REQUEST);
+    }
+  
+    // Check if wallet is already registered to another user
+    const existingUser = await this.authService.findByWalletAddress(body.walletAddress);
+    
+    // ✅ FIXED: Proper type checking
+    if (existingUser) {
+      const existingUserId = existingUser._id?.toString() || (existingUser as any).id?.toString();
+      
+      if (existingUserId && existingUserId !== req.user.userId) {
+        console.warn('⚠️ Wallet already registered to another account');
+        throw new HttpException(
+          'This wallet is already registered to another account',
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+  
+    // Update wallet address
     const updatedUser = await this.authService.updateWalletAddress(
       req.user.userId,
-      body.walletAddress
+      body.walletAddress,
     );
   
     if (!updatedUser) {
       throw new BadRequestException('Failed to update wallet');
     }
   
-    console.log('✅ Wallet updated successfully');
+    console.log('✅ Wallet updated successfully:', updatedUser.walletAddress);
   
     return {
       success: true,
       message: 'Wallet address updated successfully',
-      walletAddress: updatedUser.walletAddress
+      walletAddress: updatedUser.walletAddress,
+      user: {
+        id: updatedUser._id?.toString(),
+        _id: updatedUser._id?.toString(),
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        walletAddress: updatedUser.walletAddress,
+        role: updatedUser.role,
+      },
     };
   }
 
-
-  // ✅ DEBUG ENDPOINTS TO FIX LOGIN ISSUE
+  // ============= DEBUG ENDPOINTS =============
   @Post('debug-reset-password')
   @ApiOperation({ summary: '[DEBUG] Reset password for testing' })
   async debugResetPassword(@Body() body: { email: string; newPassword: string }) {
@@ -238,6 +292,7 @@ export class AuthController {
         emailVerified: user.emailVerified,
         isActive: user.isActive,
         role: user.role,
+        walletAddress: user.walletAddress || 'Not connected',
         hasPassword: !!user.password,
         passwordLength: user.password?.length,
         passwordTests,

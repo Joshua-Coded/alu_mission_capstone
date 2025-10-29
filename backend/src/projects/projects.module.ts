@@ -4,6 +4,7 @@ import { BlockchainModule } from "../blockchain/blockchain.module";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { UsersModule } from "../users/users.module";
 import { ProjectAssignmentService } from "./project-assignment.service";
+import { ProjectResponseTransformer } from "./project-response-transformer.service";
 import { ProjectsController } from "./projects.controller";
 import { ProjectsService } from "./projects.service";
 import { Contribution, ContributionSchema } from "./schemas/contribution.schema";
@@ -22,7 +23,15 @@ import { Project, ProjectSchema } from "./schemas/project.schema";
     BlockchainModule, 
   ],
   controllers: [ProjectsController],
-  providers: [ProjectsService, ProjectAssignmentService], 
-  exports: [ProjectsService, ProjectAssignmentService], 
+  providers: [
+    ProjectsService, 
+    ProjectAssignmentService,
+    ProjectResponseTransformer
+  ], 
+  exports: [
+    ProjectsService, 
+    ProjectAssignmentService,
+    ProjectResponseTransformer
+  ], 
 })
 export class ProjectsModule {}

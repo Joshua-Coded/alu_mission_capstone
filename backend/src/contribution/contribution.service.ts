@@ -1,111 +1,229 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { formatEther, parseEther } from "ethers";
+import { parseEther } from "ethers";
 import { Model } from "mongoose";
 import { BlockchainService } from "../blockchain/blockchain.service";
 import { ProjectsService } from "../projects/projects.service";
-import { ConfirmContributionDto, CreateContributionDto, CreateWithdrawalDto, GetContributionsQueryDto, ProcessWithdrawalDto } from "./dto/contribution.dto";
-import { Contribution, ContributionDocument, ContributionStatus, TransactionType } from "./schemas/contribution.schema";
-import { Withdrawal, WithdrawalDocument, WithdrawalStatus } from "./schemas/withdrawal.schema";
+import { Project, ProjectDocument } from "../projects/schemas/project.schema";
+import { ConfirmContributionDto, CreateContributionDto, GetContributionsQueryDto } from "./dto/contribution.dto";
+import { Contribution, ContributionDocument, ContributionStatus } from "./schemas/contribution.schema";
 
 @Injectable()
 export class ContributionService {
-    create(createDto: {
-        projectId: string; amount: number; currency: "ETH"; // Create contribution record
-    }, arg1: string) {
-        throw new Error("Method not implemented.");
-    }
   private readonly logger = new Logger(ContributionService.name);
 
   constructor(
     @InjectModel(Contribution.name) private contributionModel: Model<ContributionDocument>,
-    @InjectModel(Withdrawal.name) private withdrawalModel: Model<WithdrawalDocument>,
     private blockchainService: BlockchainService,
     private projectsService: ProjectsService,
   ) {}
 
-  // ==================== CONTRIBUTOR METHODS ====================
+  async getProjectForContribution(projectId: string): Promise<{
+    project: any;
+    blockchainProjectId: number;
+    farmerWalletAddress: string;
+    contractAddress: string;
+    currentFunding: string;
+    fundingGoal: string;
+    isFullyFunded: boolean;
+    isActive: boolean;
+    fundingDeadline: string;
+    canContribute: boolean; 
+    blockingReason?: string; 
+    instructions: {
+      step1: string;
+      step2: string;
+      step3: string;
+      step4: string;
+    };
+  }> {
+    try {
+      const project = await this.projectsService.findOne(projectId);
+      
+      if (!project) {
+        throw new NotFoundException('Project not found');
+      }
+
+      this.logger.log(`🔍 Project Check:
+        - Database ID: ${project._id}
+        - Status: ${project.status}
+        - Blockchain Project ID: ${project.blockchainProjectId}
+        - Blockchain Status: ${project.blockchainStatus}
+      `);
+
+      if (!project.farmerWalletAddress) {
+        throw new BadRequestException('Farmer wallet address not found');
+      }
+
+      if (project.blockchainProjectId === null || project.blockchainProjectId === undefined) {
+        throw new BadRequestException('Project not deployed to blockchain');
+      }
+
+      const blockchainInfo = await this.blockchainService.getProjectInfo(
+        project.blockchainProjectId
+      );
+
+      this.logger.log(`📊 Blockchain Info Retrieved:
+        - Project ID: ${project.blockchainProjectId}
+        - Owner: ${blockchainInfo.owner}
+        - Is Active: ${blockchainInfo.isActive}
+        - Is Completed: ${blockchainInfo.isCompleted}
+        - Funds Released: ${blockchainInfo.fundsReleased}
+        - Total Funding: ${blockchainInfo.totalFunding}
+        - Funding Goal: ${blockchainInfo.fundingGoal}
+        - Deadline: ${blockchainInfo.fundingDeadline}
+      `);
+
+      // ✅ NEW: Calculate if can contribute and why not
+      let canContribute = true;
+      let blockingReason: string | undefined;
+
+      if (project.status !== 'active') {
+        canContribute = false;
+        blockingReason = `Project status is "${project.status}". Only active projects accept contributions.`;
+      } else if (!blockchainInfo.isActive) {
+        canContribute = false;
+        blockingReason = 'Project is not active on blockchain. It may have been deactivated by admin or deadline passed.';
+      } else if (blockchainInfo.isCompleted) {
+        canContribute = false;
+        blockingReason = '🎉 Project is fully funded! Goal reached and funds released to farmer.';
+      } else if (blockchainInfo.fundsReleased) {
+        canContribute = false;
+        blockingReason = 'Funds already released to farmer. No more contributions accepted.';
+      } else {
+        const now = Math.floor(Date.now() / 1000);
+        const deadline = Number(blockchainInfo.fundingDeadline);
+        if (deadline > 0 && now > deadline) {
+          canContribute = false;
+          blockingReason = `Funding deadline has passed. Deadline was ${new Date(deadline * 1000).toLocaleString()}`;
+        }
+      }
+
+      const currentFunding = this.formatEther(blockchainInfo.totalFunding.toString());
+      const fundingGoal = this.formatEther(blockchainInfo.fundingGoal.toString());
+      const deadline = Number(blockchainInfo.fundingDeadline);
+
+      return {
+        project: project.toObject(),
+        blockchainProjectId: project.blockchainProjectId,
+        farmerWalletAddress: project.farmerWalletAddress,
+        contractAddress: this.blockchainService.getContractAddress(),
+        currentFunding,
+        fundingGoal,
+        isFullyFunded: blockchainInfo.isCompleted,
+        isActive: blockchainInfo.isActive,
+        fundingDeadline: new Date(deadline * 1000).toISOString(),
+        canContribute, // ✅ NEW
+        blockingReason, // ✅ NEW
+        instructions: {
+          step1: 'Connect MetaMask to Polygon Mainnet',
+          step2: `User calls contribute(${project.blockchainProjectId}) with MATIC from their wallet`,
+          step3: 'Smart contract holds funds in escrow until goal reached',
+          step4: `Contract auto-releases to farmer: ${project.farmerWalletAddress}`
+        }
+      };
+    } catch (error) {
+      this.logger.error('❌ Get project for contribution failed:', error);
+      throw error;
+    }
+  }
+
+  private formatEther(wei: string): string {
+    try {
+      const ether = BigInt(wei) / BigInt(10 ** 18);
+      const remainder = BigInt(wei) % BigInt(10 ** 18);
+      const decimalPart = remainder.toString().padStart(18, '0').slice(0, 4);
+      return `${ether}.${decimalPart}`;
+    } catch (error) {
+      return '0.0000';
+    }
+  }
 
   /**
-   * Record a contribution to a project
+   * ✅ FIXED: Uses NEW schema fields (amountMatic, amountWei, ContributionStatus enum)
    */
   async createContribution(
     contributorId: string,
     createContributionDto: CreateContributionDto,
   ): Promise<ContributionDocument> {
     try {
-      // Verify project exists and is verified
       const project = await this.projectsService.findOne(createContributionDto.projectId);
       
-      if (!project) {
-        throw new NotFoundException('Project not found');
+      if (!project || project.status !== 'active') {
+        throw new BadRequestException('Project not available for funding');
       }
-
-      if (project.status !== 'verified') {
-        throw new BadRequestException('Project is not verified for funding');
+  
+      if (project.blockchainProjectId === null || project.blockchainProjectId === undefined) {
+        throw new BadRequestException('Project not deployed to blockchain');
       }
-
-      // Check if project has blockchain ID
-      if (!project.blockchainProjectId && project.blockchainProjectId !== 0) {
-        throw new BadRequestException('Project not yet on blockchain');
-      }
-
-      // Verify blockchain project exists
-      const blockchainProject = await this.blockchainService.getProjectFromChain(
-        createContributionDto.blockchainProjectId
+  
+      const blockchainInfo = await this.blockchainService.getProjectInfo(
+        project.blockchainProjectId
       );
-
-      if (!blockchainProject.isActive) {
-        throw new BadRequestException('Project is not active on blockchain');
+  
+      if (!blockchainInfo.isActive) {
+        throw new BadRequestException('Project not active on blockchain');
       }
-
-      // Convert ETH to Wei
-      const amountWei = parseEther(createContributionDto.amountEth.toString());
-
-      // Get ETH to RWF rate at time of contribution
-      const ethToRwfRate = await this.getEthToRwfRate();
-      const amountRwf = createContributionDto.amountEth * ethToRwfRate;
-
-      // Create contribution record
+  
+      this.logger.log(`📝 Recording contribution (transaction already sent by user):
+        - Transaction Hash: ${createContributionDto.transactionHash}
+        - Amount: ${createContributionDto.amount} MATIC
+        - Project: ${project.title}
+        - Contributor: ${contributorId}
+        - Contributor Wallet: ${createContributionDto.contributorWallet}
+        - Blockchain Project ID: ${project.blockchainProjectId}
+      `);
+  
+      const amountWei = parseEther(createContributionDto.amount.toString());
+  
+      // ✅ FIXED: Include all required schema fields
       const contribution = new this.contributionModel({
+        // ✅ REQUIRED FIELDS for schema validation
+        amount: createContributionDto.amount,
+        contributorWallet: createContributionDto.contributorWallet,
+        
+        // ✅ NEW schema fields
         contributor: contributorId,
         project: createContributionDto.projectId,
-        blockchainProjectId: createContributionDto.blockchainProjectId,
-        contributorWallet: createContributionDto.contributorWallet,
-        amountEth: createContributionDto.amountEth,
+        blockchainProjectId: project.blockchainProjectId,
+        farmerWalletAddress: project.farmerWalletAddress,
+        amountMatic: createContributionDto.amount,
         amountWei: amountWei.toString(),
-        ethToRwfRate,
-        amountRwf,
         transactionHash: createContributionDto.transactionHash,
-        status: createContributionDto.transactionHash 
-          ? ContributionStatus.PENDING 
-          : ContributionStatus.PENDING,
-        transactionType: TransactionType.CONTRIBUTION,
+        status: ContributionStatus.CONFIRMED,
+        transactionType: 'contribution',
         contributedAt: new Date(),
+        confirmedAt: new Date(),
         metadata: {
           projectTitle: project.title,
-          notes: createContributionDto.notes,
+          anonymous: createContributionDto.metadata?.anonymous || false,
         },
       });
-
-      const savedContribution = await contribution.save();
-
-      this.logger.log(
-        `✅ Contribution recorded: ${savedContribution._id} - ` +
-        `${createContributionDto.amountEth} ETH (${amountRwf.toLocaleString()} RWF) ` +
-        `for project ${project.title}`
+  
+      const saved = await contribution.save();
+  
+      // ✅ Update project's currentFunding
+      await this.projectsService.recordContribution(
+        createContributionDto.projectId,
+        contributorId,
+        createContributionDto.amount,
+        createContributionDto.contributorWallet, // ✅ Use wallet from DTO
+        createContributionDto.transactionHash
       );
-
-      return savedContribution;
+  
+      this.logger.log(`✅ Contribution recorded in database:
+        - Contribution ID: ${saved._id}
+        - Amount: ${createContributionDto.amount} MATIC
+        - Status: CONFIRMED
+      `);
+  
+      return saved;
     } catch (error) {
-      this.logger.error('❌ Failed to create contribution:', error);
+      this.logger.error('❌ Record contribution failed:', error.message);
       throw error;
     }
   }
 
-  /**
-   * Confirm a contribution after blockchain transaction
-   */
   async confirmContribution(
     contributionId: string,
     confirmDto: ConfirmContributionDto,
@@ -118,38 +236,22 @@ export class ContributionService {
       }
 
       if (contribution.status === ContributionStatus.CONFIRMED) {
-        throw new BadRequestException('Contribution already confirmed');
+        throw new BadRequestException('Already confirmed');
       }
 
-      // Update contribution with blockchain data
       contribution.transactionHash = confirmDto.transactionHash;
-      contribution.blockNumber = confirmDto.blockNumber;
-      contribution.gasUsed = confirmDto.gasUsed;
       contribution.status = ContributionStatus.CONFIRMED;
       contribution.confirmedAt = new Date();
 
-      const updated = await contribution.save();
+      this.logger.log(`✅ Contribution ${contributionId} confirmed with TX ${confirmDto.transactionHash}`);
 
-      // *** FIXED: Remove the updateProjectFunding call ***
-      // The project funding is tracked on the blockchain
-      // We just need to track it in our contribution records
-      
-      this.logger.log(
-        `✅ Contribution confirmed: ${contributionId} - ` +
-        `TX: ${confirmDto.transactionHash} - ` +
-        `${contribution.amountEth} ETH (${contribution.amountRwf?.toLocaleString()} RWF)`
-      );
-
-      return updated;
+      return await contribution.save();
     } catch (error) {
-      this.logger.error('❌ Failed to confirm contribution:', error);
+      this.logger.error('❌ Confirm contribution failed:', error);
       throw error;
     }
   }
 
-  /**
-   * Get contributions for a contributor
-   */
   async getMyContributions(
     contributorId: string,
     query?: GetContributionsQueryDto,
@@ -158,19 +260,13 @@ export class ContributionService {
     total: number; 
     page: number; 
     pages: number;
-    totalEth: number;
-    totalRwf: number;
+    totalMatic: number;
   }> {
     try {
       const filter: any = { contributor: contributorId };
 
-      if (query?.status) {
-        filter.status = query.status;
-      }
-
-      if (query?.projectId) {
-        filter.project = query.projectId;
-      }
+      if (query?.status) filter.status = query.status;
+      if (query?.projectId) filter.project = query.projectId;
 
       const page = query?.page || 1;
       const limit = query?.limit || 10;
@@ -179,44 +275,40 @@ export class ContributionService {
       const [contributions, total] = await Promise.all([
         this.contributionModel
           .find(filter)
-          .populate('project', 'title description category location fundingGoal totalFunding')
-          .sort({ createdAt: -1 })
+          .populate('project', 'title description category location fundingGoal currentFunding farmerWalletAddress status blockchainProjectId')
+          .populate('contributor', 'firstName lastName email')
+          .sort({ contributedAt: -1 })
           .skip(skip)
           .limit(limit)
           .exec(),
         this.contributionModel.countDocuments(filter),
       ]);
 
-      // Calculate totals for confirmed contributions
-      const confirmedContributions = await this.contributionModel
+      const confirmed = await this.contributionModel
         .find({ ...filter, status: ContributionStatus.CONFIRMED })
+        .lean()
         .exec();
       
-      const totalEth = confirmedContributions.reduce((sum, c) => sum + c.amountEth, 0);
-      const totalRwf = confirmedContributions.reduce((sum, c) => sum + (c.amountRwf || 0), 0);
+      const totalMatic = confirmed.reduce((sum: number, c: any) => sum + (c.amountMatic || 0), 0);
 
       return {
         contributions,
         total,
         page,
         pages: Math.ceil(total / limit),
-        totalEth,
-        totalRwf,
+        totalMatic,
       };
     } catch (error) {
-      this.logger.error('❌ Failed to get contributions:', error);
+      this.logger.error('❌ Get contributions failed:', error);
       throw error;
     }
   }
 
-  /**
-   * Get contribution details
-   */
   async getContributionById(contributionId: string): Promise<ContributionDocument> {
     const contribution = await this.contributionModel
       .findById(contributionId)
       .populate('project')
-      .populate('contributor', 'name email')
+      .populate('contributor', 'firstName lastName email')
       .exec();
 
     if (!contribution) {
@@ -226,313 +318,150 @@ export class ContributionService {
     return contribution;
   }
 
-  /**
-   * Get contributions for a specific project
-   */
   async getProjectContributions(projectId: string): Promise<{
     contributions: ContributionDocument[];
-    totalAmountEth: number;
-    totalAmountRwf: number;
+    totalAmountMatic: number;
     contributorCount: number;
+    farmerWalletAddress: string;
+    blockchainProjectId: number;
+    contractAddress: string;
+    isFullyFunded: boolean;
+    currentFunding: string;
+    fundingGoal: string;
   }> {
     try {
+      const project = await this.projectsService.findOne(projectId);
+      
       const contributions = await this.contributionModel
         .find({ 
           project: projectId, 
           status: ContributionStatus.CONFIRMED 
         })
-        .populate('contributor', 'name email')
-        .sort({ createdAt: -1 })
+        .populate('contributor', 'firstName lastName email')
+        .sort({ contributedAt: -1 })
         .exec();
 
-      const totalAmountEth = contributions.reduce((sum, c) => sum + c.amountEth, 0);
-      const totalAmountRwf = contributions.reduce((sum, c) => sum + (c.amountRwf || 0), 0);
+      const totalAmountMatic = contributions.reduce((sum, c) => sum + (c.amountMatic || 0), 0);
       const uniqueContributors = new Set(contributions.map(c => c.contributor.toString()));
+
+      let blockchainInfo: any = {
+        totalFunding: BigInt(0),
+        fundingGoal: BigInt(0),
+        isCompleted: false,
+      };
+
+      if (project.blockchainProjectId !== null && project.blockchainProjectId !== undefined) {
+        blockchainInfo = await this.blockchainService.getProjectInfo(
+          project.blockchainProjectId
+        );
+      }
 
       return {
         contributions,
-        totalAmountEth,
-        totalAmountRwf,
+        totalAmountMatic,
         contributorCount: uniqueContributors.size,
+        farmerWalletAddress: project.farmerWalletAddress,
+        blockchainProjectId: project.blockchainProjectId,
+        contractAddress: this.blockchainService.getContractAddress(),
+        isFullyFunded: blockchainInfo.isCompleted,
+        currentFunding: this.formatEther(blockchainInfo.totalFunding.toString()),
+        fundingGoal: this.formatEther(blockchainInfo.fundingGoal.toString()),
       };
     } catch (error) {
-      this.logger.error('❌ Failed to get project contributions:', error);
+      this.logger.error('❌ Get project contributions failed:', error);
       throw error;
     }
   }
 
-  /**
-   * Get contribution statistics for a contributor
-   */
   async getContributorStats(contributorId: string): Promise<{
     totalContributions: number;
-    totalAmountEth: number;
-    totalAmountRwf: number;
+    totalAmountMatic: number;
     projectsSupported: number;
     confirmedContributions: number;
     pendingContributions: number;
   }> {
     try {
-      const contributions = await this.contributionModel.find({ contributor: contributorId });
+      const contributions = await this.contributionModel
+        .find({ contributor: contributorId })
+        .lean()
+        .exec();
 
-      const confirmed = contributions.filter(c => c.status === ContributionStatus.CONFIRMED);
-      const pending = contributions.filter(c => c.status === ContributionStatus.PENDING);
-      const totalAmountEth = confirmed.reduce((sum, c) => sum + c.amountEth, 0);
-      const totalAmountRwf = confirmed.reduce((sum, c) => sum + (c.amountRwf || 0), 0);
-      const uniqueProjects = new Set(contributions.map(c => c.project.toString()));
+      const confirmed = contributions.filter((c: any) => c.status === ContributionStatus.CONFIRMED);
+      const pending = contributions.filter((c: any) => c.status === ContributionStatus.PENDING);
+      const totalAmountMatic = confirmed.reduce((sum: number, c: any) => sum + (c.amountMatic || 0), 0);
+      const uniqueProjects = new Set(contributions.map((c: any) => c.project.toString()));
 
       return {
         totalContributions: contributions.length,
-        totalAmountEth,
-        totalAmountRwf,
+        totalAmountMatic,
         projectsSupported: uniqueProjects.size,
         confirmedContributions: confirmed.length,
         pendingContributions: pending.length,
       };
     } catch (error) {
-      this.logger.error('❌ Failed to get contributor stats:', error);
+      this.logger.error('❌ Get contributor stats failed:', error);
       throw error;
     }
   }
 
-  // ==================== WITHDRAWAL METHODS ====================
-
-  /**
-   * Request withdrawal (farmer)
-   */
-  async requestWithdrawal(
-    farmerId: string,
-    createWithdrawalDto: CreateWithdrawalDto,
-  ): Promise<WithdrawalDocument> {
-    try {
-      // Verify project ownership
-      const project = await this.projectsService.findOne(createWithdrawalDto.projectId);
-      
-      if (!project) {
-        throw new NotFoundException('Project not found');
-      }
-
-      if (project.farmer.toString() !== farmerId) {
-        throw new HttpException('Not project owner', HttpStatus.FORBIDDEN);
-      }
-
-      // Check if project is completed on blockchain
-      const blockchainStatus = await this.blockchainService.checkProjectCompletion(
-        createWithdrawalDto.blockchainProjectId
-      );
-
-      if (!blockchainStatus.isCompleted) {
-        throw new BadRequestException('Project not completed on blockchain');
-      }
-
-      // Get current ETH to RWF rate
-      const ethToRwfRate = await this.getEthToRwfRate();
-      const amountRwf = parseFloat(blockchainStatus.totalFunding) * ethToRwfRate;
-
-      // Create withdrawal request
-      const withdrawal = new this.withdrawalModel({
-        farmer: farmerId,
-        project: createWithdrawalDto.projectId,
-        blockchainProjectId: createWithdrawalDto.blockchainProjectId,
-        farmerWallet: createWithdrawalDto.farmerWallet,
-        amountEth: parseFloat(blockchainStatus.totalFunding),
-        amountWei: parseEther(blockchainStatus.totalFunding).toString(),
-        ethToRwfRate,
-        amountRwf,
-        paymentMethod: createWithdrawalDto.paymentMethod,
-        recipientPhone: createWithdrawalDto.recipientPhone,
-        recipientBankAccount: createWithdrawalDto.recipientBankAccount,
-        recipientBankName: createWithdrawalDto.recipientBankName,
-        recipientName: createWithdrawalDto.recipientName,
-        status: WithdrawalStatus.PENDING,
-        requestedAt: new Date(),
-        metadata: {
-          projectTitle: project.title,
-          notes: createWithdrawalDto.notes,
-        },
-      });
-
-      const saved = await withdrawal.save();
-
-      this.logger.log(
-        `✅ Withdrawal requested: ${saved._id} - ` +
-        `${saved.amountEth} ETH → ${saved.amountRwf.toLocaleString()} RWF ` +
-        `(Rate: ${ethToRwfRate.toLocaleString()}) - ` +
-        `Project: ${project.title}`
-      );
-
-      return saved;
-    } catch (error) {
-      this.logger.error('❌ Failed to request withdrawal:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Process withdrawal (admin/government)
-   */
-  async processWithdrawal(
-    withdrawalId: string,
-    processedBy: string,
-    processDto: ProcessWithdrawalDto,
-  ): Promise<WithdrawalDocument> {
-    try {
-      const withdrawal = await this.withdrawalModel.findById(withdrawalId);
-
-      if (!withdrawal) {
-        throw new NotFoundException('Withdrawal not found');
-      }
-
-      if (withdrawal.status !== WithdrawalStatus.PENDING) {
-        throw new BadRequestException('Withdrawal already processed');
-      }
-
-      // Calculate transaction fee (example: 1% fee)
-      const transactionFee = withdrawal.amountRwf * 0.01;
-      const finalAmount = withdrawal.amountRwf - transactionFee;
-
-      withdrawal.status = WithdrawalStatus.COMPLETED;
-      withdrawal.paymentReference = processDto.paymentReference;
-      withdrawal.blockchainTxHash = processDto.blockchainTxHash;
-      withdrawal.processedBy = processedBy;
-      withdrawal.transactionFee = transactionFee;
-      withdrawal.finalAmountRwf = finalAmount;
-      withdrawal.processedAt = new Date();
-      withdrawal.completedAt = new Date();
-
-      const updated = await withdrawal.save();
-
-      this.logger.log(
-        `✅ Withdrawal processed: ${withdrawalId} - ` +
-        `Paid: ${finalAmount.toLocaleString()} RWF ` +
-        `(Fee: ${transactionFee.toLocaleString()} RWF) - ` +
-        `Ref: ${processDto.paymentReference}`
-      );
-
-      return updated;
-    } catch (error) {
-      this.logger.error('❌ Failed to process withdrawal:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get farmer withdrawals
-   */
-  async getFarmerWithdrawals(farmerId: string): Promise<WithdrawalDocument[]> {
-    try {
-      return await this.withdrawalModel
-        .find({ farmer: farmerId })
-        .populate('project', 'title description category')
-        .sort({ createdAt: -1 })
-        .exec();
-    } catch (error) {
-      this.logger.error('❌ Failed to get farmer withdrawals:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get all pending withdrawals (admin)
-   */
-  async getPendingWithdrawals(): Promise<WithdrawalDocument[]> {
-    try {
-      return await this.withdrawalModel
-        .find({ status: WithdrawalStatus.PENDING })
-        .populate('project', 'title description')
-        .populate('farmer', 'name email phone')
-        .sort({ requestedAt: 1 })
-        .exec();
-    } catch (error) {
-      this.logger.error('❌ Failed to get pending withdrawals:', error);
-      throw error;
-    }
-  }
-
-  // ==================== UTILITY METHODS ====================
-
-  /**
-   * Get ETH to RWF exchange rate
-   * In production, integrate with a real API like CoinGecko or your preferred provider
-   */
-  private async getEthToRwfRate(): Promise<number> {
-    // TODO: Integrate with real exchange rate API
-    // Example integration with CoinGecko:
-    /*
-    try {
-      const response = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=rwf'
-      );
-      const data = await response.json();
-      return data.ethereum.rwf;
-    } catch (error) {
-      this.logger.warn('Failed to fetch real-time rate, using default', error);
-      return 3900000; // Fallback rate
-    }
-    */
-
-    // For simulation, using approximate rate
-    // 1 ETH = ~$3000 USD
-    // 1 USD = ~1300 RWF
-    // So 1 ETH = ~3,900,000 RWF
-    return 3900000;
-  }
-
-  /**
-   * Simulate ETH to RWF conversion
-   */
-  async convertEthToRwf(amountEth: number): Promise<{
-    amountEth: number;
-    amountRwf: number;
-    exchangeRate: number;
-  }> {
-    const rate = await this.getEthToRwfRate();
-    return {
-      amountEth,
-      amountRwf: amountEth * rate,
-      exchangeRate: rate,
-    };
-  }
-
- /**
- * Get platform contribution statistics
- */
-async getPlatformStats(): Promise<{
+  async getPlatformStats(): Promise<{
     totalContributions: number;
-    totalAmountEth: number;
-    totalAmountRwf: number;
+    totalAmountMatic: number;
     totalContributors: number;
     totalProjectsFunded: number;
-    totalWithdrawals: number;
-    totalWithdrawnRwf: number;
   }> {
     try {
-      const confirmedContributions = await this.contributionModel.find({ 
-        status: ContributionStatus.CONFIRMED 
-      });
+      const confirmedContributions = await this.contributionModel
+        .find({ status: ContributionStatus.CONFIRMED })
+        .lean()
+        .exec();
   
-      const completedWithdrawals = await this.withdrawalModel.find({ 
-        status: WithdrawalStatus.COMPLETED 
-      });
-  
-      const totalAmountEth = confirmedContributions.reduce((sum, c) => sum + c.amountEth, 0);
-      const totalAmountRwf = confirmedContributions.reduce((sum, c) => sum + (c.amountRwf || 0), 0);
-      const uniqueContributors = new Set(confirmedContributions.map(c => c.contributor.toString()));
-      const uniqueProjects = new Set(confirmedContributions.map(c => c.project.toString())); // FIXED: Added missing >
-      const totalWithdrawnRwf = completedWithdrawals.reduce((sum, w) => sum + (w.finalAmountRwf || 0), 0);
+      const totalAmountMatic = confirmedContributions.reduce((sum: number, c: any) => sum + (c.amountMatic || 0), 0);
+      const uniqueContributors = new Set(confirmedContributions.map((c: any) => c.contributor.toString()));
+      const uniqueProjects = new Set(confirmedContributions.map((c: any) => c.project.toString()));
   
       return {
         totalContributions: confirmedContributions.length,
-        totalAmountEth,
-        totalAmountRwf,
+        totalAmountMatic,
         totalContributors: uniqueContributors.size,
         totalProjectsFunded: uniqueProjects.size,
-        totalWithdrawals: completedWithdrawals.length,
-        totalWithdrawnRwf,
       };
     } catch (error) {
-      this.logger.error('❌ Failed to get platform stats:', error);
+      this.logger.error('❌ Get platform stats failed:', error);
       throw error;
     }
   }
+
+// Add this method to your ContributionService class
+async getContributionCount(projectId: string): Promise<{ count: number }> {
+  try {
+    const project = await this.projectsService.findOne(projectId);
+    
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (project.blockchainProjectId === null || project.blockchainProjectId === undefined) {
+      return { count: 0 };
+    }
+
+    // Get count directly from blockchain using your existing method
+    const blockchainCount = await this.blockchainService.getContributorCount(project.blockchainProjectId);
+
+    this.logger.log(`📊 Blockchain contribution count for project ${projectId}: ${blockchainCount}`);
+
+    return { count: blockchainCount };
+  } catch (error) {
+    this.logger.error('❌ Get contribution count failed:', error);
+    
+    // Fallback to database count if blockchain fails
+    const dbCount = await this.contributionModel.countDocuments({
+      project: projectId,
+      status: ContributionStatus.CONFIRMED
+    });
+    
+    return { count: dbCount };
+  }
+}
+
 }

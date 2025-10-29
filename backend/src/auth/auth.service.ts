@@ -3,6 +3,7 @@ import * as crypto from "crypto";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Types } from "mongoose";
+import { User } from "src/users/schemas/user.schema";
 import { GovernmentDepartment, ProjectCategory, UserRole } from "../common/enums/user-role.enum";
 import { EmailService } from "../email/email.service";
 import { UsersService } from "../users/users.service";
@@ -15,7 +16,8 @@ import {
   Injectable, 
   Logger, 
   UnauthorizedException,
-  InternalServerErrorException 
+  InternalServerErrorException, 
+  NotFoundException
 } from "@nestjs/common";
 
 @Injectable()
@@ -347,6 +349,22 @@ export class AuthService {
     return { message: 'Password reset email sent if user exists' };
   }
 
+  async findByWalletAddress(walletAddress: string): Promise<User | null> {
+    return this.usersService.findByWalletAddress(walletAddress);
+  }
+  
+  async updateWalletAddress(userId: string, walletAddress: string): Promise<User> {
+    const updatedUser = await this.usersService.updateWalletAddress(userId, walletAddress);
+    
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+  
+    this.logger.log(`💼 Wallet synced for user ${userId}: ${walletAddress}`);
+    return updatedUser;
+  }
+  
+
   async resetPassword(token: string, newPassword: string) {
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
     const user = await this.usersService.findByPasswordResetToken(hashedToken);
@@ -364,7 +382,4 @@ export class AuthService {
     return { message: 'Password reset successful' };
   }
 
-  async updateWalletAddress(userId: string, walletAddress: string) {
-    return this.usersService.updateWalletAddress(userId, walletAddress);
-  }
 }

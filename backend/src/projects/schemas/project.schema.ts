@@ -2,9 +2,16 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 import { GovernmentDepartment } from "src/common/enums/government-department.enum";
 
-// Update the ProjectDocument type to include _id
 export type ProjectDocument = Project & Document & {
-  _id: Types.ObjectId;
+  fundingGoalMatic: number;
+  currentFundingMatic: number;
+  fundingGoalFormatted: string;
+  currentFundingFormatted: string;
+  fundingProgress: number;
+  isFunded(): boolean;
+  canBeEdited(): boolean;
+  canBeDeleted(): boolean;
+  getAmountsInMatic(): any;
 };
 
 class DueDiligenceDocument {
@@ -73,13 +80,34 @@ class ProjectDocumentItem {
   uploadedAt: Date;
 }
 
-@Schema({ timestamps: true })
+// ✅ FIXED: Proper contributor structure
+class ContributorInfo {
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  contributor: Types.ObjectId;
+
+  @Prop({ required: true })
+  amount: number;
+
+  @Prop({ required: true })
+  contributedAt: Date;
+
+  @Prop({ required: true })
+  walletAddress: string;
+
+  @Prop({ required: true })
+  txHash: string;
+}
+
+@Schema({ timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } })
 export class Project {
   @Prop({ required: true, unique: true })
   projectId: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   farmer: Types.ObjectId;
+
+  @Prop({ required: true })
+  farmerWalletAddress: string;
 
   @Prop({ required: true })
   title: string;
@@ -89,6 +117,13 @@ export class Project {
 
   @Prop({ required: true })
   fundingGoal: number;
+
+  @Prop({ 
+    type: String, 
+    enum: ['MATIC'],
+    default: 'MATIC'
+  })
+  currency: string;
 
   @Prop({ required: true })
   category: string;
@@ -171,8 +206,9 @@ export class Project {
   @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
   favoritedBy: Types.ObjectId[];
 
-  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
-  contributors: Types.ObjectId[];
+  // ✅ FIXED: Contributors array with full info
+  @Prop({ type: [ContributorInfo], default: [] })
+  contributors: ContributorInfo[];
 
   @Prop({ type: Object, default: {} })
   metadata: {
@@ -184,7 +220,47 @@ export class Project {
 
 export const ProjectSchema = SchemaFactory.createForClass(Project);
 
-// Indexes
+ProjectSchema.virtual('fundingProgress').get(function(this: ProjectDocument) {
+  return this.fundingGoal > 0 ? (this.currentFunding / this.fundingGoal) * 100 : 0;
+});
+
+ProjectSchema.virtual('fundingGoalFormatted').get(function(this: ProjectDocument) {
+  return `${this.fundingGoal} MATIC`;
+});
+
+ProjectSchema.virtual('currentFundingFormatted').get(function(this: ProjectDocument) {
+  return `${this.currentFunding} MATIC`;
+});
+
+ProjectSchema.virtual('fundingGoalMatic').get(function(this: ProjectDocument) {
+  return this.fundingGoal;
+});
+
+ProjectSchema.virtual('currentFundingMatic').get(function(this: ProjectDocument) {
+  return this.currentFunding;
+});
+
+ProjectSchema.methods.isFunded = function(this: ProjectDocument): boolean {
+  return this.currentFunding >= this.fundingGoal;
+};
+
+ProjectSchema.methods.canBeEdited = function(this: ProjectDocument): boolean {
+  return this.status === 'submitted';
+};
+
+ProjectSchema.methods.canBeDeleted = function(this: ProjectDocument): boolean {
+  return this.status === 'submitted';
+};
+
+ProjectSchema.methods.getAmountsInMatic = function(this: ProjectDocument) {
+  return {
+    fundingGoal: this.fundingGoal,
+    currentFunding: this.currentFunding,
+    currency: 'MATIC',
+    fundingProgress: this.fundingGoal > 0 ? (this.currentFunding / this.fundingGoal) * 100 : 0,
+  };
+};
+
 ProjectSchema.index({ farmer: 1 });
 ProjectSchema.index({ status: 1 });
 ProjectSchema.index({ department: 1 });
@@ -194,24 +270,4 @@ ProjectSchema.index({ createdAt: -1 });
 ProjectSchema.index({ fundingGoal: 1 });
 ProjectSchema.index({ 'dueDiligence.assignedTo': 1 });
 ProjectSchema.index({ 'verification.verifiedBy': 1 });
-
-// Virtuals
-ProjectSchema.virtual('fundingProgress').get(function() {
-  return this.fundingGoal > 0 ? (this.currentFunding / this.fundingGoal) * 100 : 0;
-});
-
-// Instance methods
-ProjectSchema.methods.isFunded = function(): boolean {
-  return this.currentFunding >= this.fundingGoal;
-};
-
-ProjectSchema.methods.canBeEdited = function(): boolean {
-  return this.status === 'submitted';
-};
-
-ProjectSchema.methods.canBeDeleted = function(): boolean {
-  return this.status === 'submitted';
-};
-
-ProjectSchema.set('toJSON', { virtuals: true });
-ProjectSchema.set('toObject', { virtuals: true });
+ProjectSchema.index({ 'contributors.contributor': 1 });
