@@ -53,6 +53,39 @@ interface ProjectDetailsModalProps {
   onAssignOfficer?: (projectId: string) => void;
 }
 
+// Enhanced location formatting function
+const formatLocation = (location: string | undefined): string => {
+  if (!location) return 'Location not specified';
+  
+  const trimmedLocation = location.trim();
+  
+  if (trimmedLocation === '') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'unknown') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'none') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'null') return 'Location not specified';
+  
+  // If location is just a city name without country, add Rwanda as default
+  if (!trimmedLocation.includes(',') && !trimmedLocation.includes('-')) {
+    return `${trimmedLocation}, Rwanda`;
+  }
+  
+  return trimmedLocation;
+};
+
+// Extract location parts for better display
+const parseLocation = (location: string | undefined) => {
+  if (!location) return { city: 'Unknown', country: 'Rwanda', full: 'Location not specified' };
+  
+  const formatted = formatLocation(location);
+  const parts = formatted.split(',');
+  
+  return {
+    city: parts[0]?.trim() || 'Unknown',
+    country: parts[1]?.trim() || 'Rwanda',
+    full: formatted
+  };
+};
+
 const normalizeProjectStatus = (status: string): string => {
   return status.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
@@ -82,12 +115,16 @@ export default function ProjectDetailsModal({
 
   const farmerInfo = getFarmerInfo();
   const fundingProgress = project.fundingGoal > 0 ? (project.currentFunding / project.fundingGoal) * 100 : 0;
+  
+  // Parse location for better display
+  const locationInfo = parseLocation(project.location);
 
   const getStatusColor = (status: ProjectStatus) => {
     const colors: Record<ProjectStatus, string> = {
       [ProjectStatus.SUBMITTED]: 'blue', [ProjectStatus.UNDER_REVIEW]: 'yellow',
       [ProjectStatus.ACTIVE]: 'green', [ProjectStatus.REJECTED]: 'red',
-      [ProjectStatus.FUNDED]: 'purple', [ProjectStatus.CLOSED]: 'gray'
+      [ProjectStatus.FUNDED]: 'purple', [ProjectStatus.CLOSED]: 'gray',
+      [ProjectStatus.VERIFIED]: "green"
     };
     return colors[status] || 'gray';
   };
@@ -113,6 +150,11 @@ export default function ProjectDetailsModal({
     return new Intl.NumberFormat('en-US', {
       style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  // Format MATIC amount for blockchain projects
+  const formatMatic = (amount: number) => {
+    return `${amount.toFixed(2)} MATIC`;
   };
 
   const canApprove = [ProjectStatus.SUBMITTED, ProjectStatus.UNDER_REVIEW].includes(project.status);
@@ -153,6 +195,11 @@ export default function ProjectDetailsModal({
               <Text>{formatDate(project.submittedAt || project.createdAt)}</Text>
               <Text>•</Text>
               <Text>{project.category}</Text>
+              <Text>•</Text>
+              <HStack spacing={1}>
+                <Icon as={FiMapPin} color="red.500" boxSize={3} />
+                <Text>{locationInfo.city}</Text>
+              </HStack>
             </HStack>
           </VStack>
         </ModalHeader>
@@ -175,8 +222,8 @@ export default function ProjectDetailsModal({
                       <CardBody>
                         <Stat>
                           <StatLabel>Funding Goal</StatLabel>
-                          <StatNumber color="green.700">{formatCurrency(project.fundingGoal)}</StatNumber>
-                          <StatHelpText><Icon as={FiDollarSign} mr={1} />Target</StatHelpText>
+                          <StatNumber color="green.700">{formatMatic(project.fundingGoal)}</StatNumber>
+                          <StatHelpText><Icon as={FiDollarSign} mr={1} />Target in MATIC</StatHelpText>
                         </Stat>
                       </CardBody>
                     </Card>
@@ -184,7 +231,7 @@ export default function ProjectDetailsModal({
                       <CardBody>
                         <Stat>
                           <StatLabel>Current Funding</StatLabel>
-                          <StatNumber color="blue.700">{formatCurrency(project.currentFunding)}</StatNumber>
+                          <StatNumber color="blue.700">{formatMatic(project.currentFunding)}</StatNumber>
                           <StatHelpText><Icon as={FiTrendingUp} mr={1} />{fundingProgress.toFixed(1)}%</StatHelpText>
                         </Stat>
                       </CardBody>
@@ -207,7 +254,7 @@ export default function ProjectDetailsModal({
                           <HStack justify="space-between" w="full">
                             <Text fontWeight="bold">Funding Progress</Text>
                             <Text fontWeight="bold" color={fundingProgress >= 100 ? 'green.600' : 'blue.600'}>
-                              {formatCurrency(project.currentFunding)} / {formatCurrency(project.fundingGoal)}
+                              {formatMatic(project.currentFunding)} / {formatMatic(project.fundingGoal)}
                             </Text>
                           </HStack>
                           <Progress value={Math.min(fundingProgress, 100)} colorScheme={fundingProgress >= 100 ? "green" : "blue"}
@@ -226,7 +273,7 @@ export default function ProjectDetailsModal({
                       <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={6}>
                         <GridItem>
                           <VStack align="start" spacing={3}>
-                            <HStack><Icon as={FiUser} color="purple.500" boxSize={5} /><Text fontWeight="bold">Farmer</Text></HStack>
+                            <HStack><Icon as={FiUser} color="purple.500" boxSize={5} /><Text fontWeight="bold">Farmer Information</Text></HStack>
                             <HStack pl={8} align="start" spacing={4}>
                               {farmerInfo.profileImage && <Avatar size="lg" src={farmerInfo.profileImage} name={farmerInfo.name} />}
                               <VStack align="start" spacing={1}>
@@ -236,22 +283,73 @@ export default function ProjectDetailsModal({
                                 </Text>
                                 <Text><strong>Phone:</strong> {farmerInfo.phone}</Text>
                                 <Text><strong>Location:</strong> {farmerInfo.location}</Text>
+                                {project.farmerWalletAddress && (
+                                  <Tooltip label="Farmer's blockchain wallet address">
+                                    <Text fontSize="xs" color="gray.500" fontFamily="mono">
+                                      <strong>Wallet:</strong> {project.farmerWalletAddress.slice(0, 8)}...{project.farmerWalletAddress.slice(-6)}
+                                    </Text>
+                                  </Tooltip>
+                                )}
                               </VStack>
                             </HStack>
                           </VStack>
                         </GridItem>
                         <GridItem>
                           <VStack align="start" spacing={3}>
-                            <HStack><Icon as={FiMapPin} color="purple.500" boxSize={5} /><Text fontWeight="bold">Location</Text></HStack>
-                            <VStack align="start" spacing={1} pl={8}>
-                              <Text><strong>Location:</strong> {project.location}</Text>
-                              <HStack><Text><strong>Department:</strong></Text>
-                                <Badge colorScheme={getDepartmentColor(project.department)}>
-                                  {project.department?.replace(/_/g, ' ') || 'GENERAL'}
-                                </Badge>
+                            <HStack><Icon as={FiMapPin} color="purple.500" boxSize={5} /><Text fontWeight="bold">Project Location</Text></HStack>
+                            <VStack align="start" spacing={2} pl={8}>
+                              <HStack spacing={3}>
+                                <Box
+                                  p={2}
+                                  bg="red.100"
+                                  borderRadius="full"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                >
+                                  <Icon as={FiMapPin} color="red.500" boxSize={4} />
+                                </Box>
+                                <VStack align="start" spacing={0}>
+                                  <Text fontWeight="semibold" fontSize="lg">{locationInfo.city}</Text>
+                                  <Text fontSize="sm" color="gray.600">{locationInfo.country}</Text>
+                                  {project.location && project.location.toLowerCase() !== locationInfo.full.toLowerCase() && (
+                                    <Text fontSize="xs" color="gray.500" fontStyle="italic">
+                                      Original: {project.location}
+                                    </Text>
+                                  )}
+                                </VStack>
                               </HStack>
-                              <Text><strong>Category:</strong> {project.category}</Text>
-                              <Text><strong>Timeline:</strong> {project.timeline || 'Not specified'}</Text>
+                              
+                              <HStack spacing={4} mt={2}>
+                                <Box>
+                                  <Text fontSize="sm" color="gray.600"><strong>Department:</strong></Text>
+                                  <Badge colorScheme={getDepartmentColor(project.department)} fontSize="sm" px={2} py={1}>
+                                    {project.department?.replace(/_/g, ' ') || 'GENERAL'}
+                                  </Badge>
+                                </Box>
+                                <Box>
+                                  <Text fontSize="sm" color="gray.600"><strong>Category:</strong></Text>
+                                  <Text fontSize="sm" fontWeight="medium">{project.category}</Text>
+                                </Box>
+                              </HStack>
+                              
+                              <Box mt={2}>
+                                <Text fontSize="sm" color="gray.600"><strong>Timeline:</strong></Text>
+                                <Text fontSize="sm">{project.timeline || 'Not specified'}</Text>
+                              </Box>
+
+                              {/* Blockchain Info */}
+                              {project.blockchainProjectId !== undefined && (
+                                <Box mt={3} p={2} bg="purple.50" borderRadius="md" border="1px" borderColor="purple.200">
+                                  <Text fontSize="xs" fontWeight="bold" color="purple.700">Blockchain Information</Text>
+                                  <Text fontSize="xs" color="purple.600">
+                                    Project ID: {project.blockchainProjectId}
+                                  </Text>
+                                  <Text fontSize="xs" color="purple.600">
+                                    Status: {project.blockchainStatus || 'Not created'}
+                                  </Text>
+                                </Box>
+                              )}
                             </VStack>
                           </VStack>
                         </GridItem>
@@ -262,8 +360,18 @@ export default function ProjectDetailsModal({
                   <Card>
                     <CardBody>
                       <VStack align="start" spacing={3}>
-                        <HStack><Icon as={FiFileText} color="purple.500" boxSize={5} /><Text fontWeight="bold">Description</Text></HStack>
-                        <Text pl={8} whiteSpace="pre-wrap">{project.description || 'No description'}</Text>
+                        <HStack><Icon as={FiFileText} color="purple.500" boxSize={5} /><Text fontWeight="bold">Project Description</Text></HStack>
+                        <Box 
+                          pl={8} 
+                          whiteSpace="pre-wrap" 
+                          bg={useColorModeValue('gray.50', 'gray.700')} 
+                          p={4} 
+                          borderRadius="md"
+                          border="1px"
+                          borderColor={useColorModeValue('gray.200', 'gray.600')}
+                        >
+                          {project.description || 'No description provided for this project.'}
+                        </Box>
                       </VStack>
                     </CardBody>
                   </Card>
@@ -271,13 +379,35 @@ export default function ProjectDetailsModal({
                   <Card bg="purple.50" border="2px" borderColor="purple.300">
                     <CardBody>
                       <VStack spacing={4}>
-                        <Text fontWeight="bold">Actions</Text>
+                        <Text fontWeight="bold" color="purple.700">Review Actions</Text>
                         <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={3} w="full">
-                          {canApprove && <Button colorScheme="green" leftIcon={<FiCheckCircle />} onClick={onApprove} size="lg" w="full">Approve</Button>}
-                          {canRequestRevision && <Button colorScheme="orange" leftIcon={<FiAlertTriangle />} onClick={onRequestRevision} size="lg" w="full">Request Revision</Button>}
-                          {canReject && <Button colorScheme="red" leftIcon={<FiAlertTriangle />} onClick={onReject} size="lg" w="full">Reject</Button>}
-                          {onAssignOfficer && <Button colorScheme="blue" leftIcon={<FiUser />} onClick={() => onAssignOfficer(project._id)} size="lg" w="full">Assign Officer</Button>}
+                          {canApprove && (
+                            <Button colorScheme="green" leftIcon={<FiCheckCircle />} onClick={onApprove} size="lg" w="full">
+                              Approve Project
+                            </Button>
+                          )}
+                          {canRequestRevision && (
+                            <Button colorScheme="orange" leftIcon={<FiAlertTriangle />} onClick={onRequestRevision} size="lg" w="full">
+                              Request Revision
+                            </Button>
+                          )}
+                          {canReject && (
+                            <Button colorScheme="red" leftIcon={<FiAlertTriangle />} onClick={onReject} size="lg" w="full">
+                              Reject Project
+                            </Button>
+                          )}
+                          {onAssignOfficer && (
+                            <Button colorScheme="blue" leftIcon={<FiUser />} onClick={() => onAssignOfficer(project._id)} size="lg" w="full">
+                              Assign Officer
+                            </Button>
+                          )}
                         </SimpleGrid>
+                        {!canApprove && !canReject && !canRequestRevision && (
+                          <Alert status="info">
+                            <AlertIcon />
+                            This project has already been processed and cannot be modified.
+                          </Alert>
+                        )}
                       </VStack>
                     </CardBody>
                   </Card>
@@ -291,7 +421,7 @@ export default function ProjectDetailsModal({
               <TabPanel>
                 <VStack spacing={4}>
                   {(!project.images || project.images.length === 0) ? (
-                    <Alert status="info"><AlertIcon />No images uploaded</Alert>
+                    <Alert status="info"><AlertIcon />No images uploaded for this project</Alert>
                   ) : (
                     <>
                       <Text fontWeight="bold">Project Images ({project.images.length})</Text>
@@ -322,10 +452,10 @@ export default function ProjectDetailsModal({
               <TabPanel>
                 <VStack spacing={4}>
                   {(!project.documents || project.documents.length === 0) ? (
-                    <Alert status="info"><AlertIcon />No documents uploaded</Alert>
+                    <Alert status="info"><AlertIcon />No documents uploaded for this project</Alert>
                   ) : (
                     <>
-                      <Text fontWeight="bold">Documents ({project.documents.length})</Text>
+                      <Text fontWeight="bold">Project Documents ({project.documents.length})</Text>
                       {project.documents.map((doc, i) => (
                         <Card key={i} w="full">
                           <CardBody>
@@ -335,7 +465,7 @@ export default function ProjectDetailsModal({
                                 <VStack align="start" spacing={0}>
                                   <Text fontWeight="medium">{doc.name}</Text>
                                   <Text fontSize="xs" color="gray.500">
-                                    {doc.name.split('.').pop()?.toUpperCase()} • {doc.uploadedAt ? formatDate(doc.uploadedAt) : 'No date'}
+                                  {doc.name ? doc.name.split('.').pop()?.toUpperCase() : 'FILE'} • {doc.uploadedAt ? formatDate(doc.uploadedAt) : 'No date'}
                                   </Text>
                                 </VStack>
                               </HStack>
@@ -357,13 +487,14 @@ export default function ProjectDetailsModal({
                   <Card w="full">
                     <CardBody>
                       <VStack align="start" spacing={3}>
-                        <Text fontWeight="bold">Timeline</Text>
+                        <Text fontWeight="bold">Project Timeline</Text>
                         <VStack align="start" spacing={2} pl={4}>
                           <HStack><Icon as={FiCalendar} color="blue.500" /><Text fontSize="sm">Created: {formatDate(project.createdAt)}</Text></HStack>
                           {project.submittedAt && <HStack><Icon as={FiCheckCircle} color="green.500" /><Text fontSize="sm">Submitted: {formatDate(project.submittedAt)}</Text></HStack>}
                           {project.dueDiligence?.startedAt && <HStack><Icon as={FiClock} color="yellow.500" /><Text fontSize="sm">Review Started: {formatDate(project.dueDiligence.startedAt)}</Text></HStack>}
                           {project.dueDiligence?.completedAt && <HStack><Icon as={FiCheckCircle} color="green.500" /><Text fontSize="sm">Review Done: {formatDate(project.dueDiligence.completedAt)}</Text></HStack>}
                           {project.verification?.verifiedAt && <HStack><Icon as={FiCheckCircle} color="green.500" /><Text fontSize="sm">Approved: {formatDate(project.verification.verifiedAt)}</Text></HStack>}
+                          {project.blockchainCreatedAt && <HStack><Icon as={FiCheckCircle} color="purple.500" /><Text fontSize="sm">Blockchain Created: {formatDate(project.blockchainCreatedAt)}</Text></HStack>}
                         </VStack>
                       </VStack>
                     </CardBody>

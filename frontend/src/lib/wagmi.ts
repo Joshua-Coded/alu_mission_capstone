@@ -1,18 +1,62 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http } from "viem";
-import { sepolia } from "wagmi/chains";
+import { polygon } from "wagmi/chains";
 
 export const config = getDefaultConfig({
   appName: "RootRise - Agricultural Crowdfunding",
-  projectId: "cd9b2e9c8b5a4f2e8d1c3a6b7e9f2d4a",
-  chains: [sepolia],
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+  chains: [polygon],
   transports: {
-    [sepolia.id]: http("https://sepolia.infura.io/v3/1afeb755d8924bf4b93020cd1c72bc19"),
+    [polygon.id]: http("https://polygon-rpc.com"),
   },
   ssr: true,
 });
 
-export const CONTRACTS = {
-  ROOTRISE: "0x1A3B56BF1DDF92a4ADDd1b897B8Ce6E678AA81bc",
-  MOCK_USDC: "0xa22c9a8c9293476Fbc9D6f8053284FD226e42F48",
+// ✅ Contract address from env
+export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_ROOTRISE_CONTRACT as `0x${string}`;
+
+// ✅ Network configuration
+export const POLYGON_MAINNET = {
+  id: 137,
+  name: "Polygon Mainnet",
+  currency: "MATIC",
+  explorer: "https://polygonscan.com",
+  rpc: "https://polygon-rpc.com",
 } as const;
+
+// ✅ HELPER FUNCTIONS (These were missing!)
+
+/**
+ * Get network info by chain ID
+ */
+export function getNetworkInfo(chainId: number) {
+  if (chainId === 137) {
+    return POLYGON_MAINNET;
+  }
+  return null;
+}
+
+/**
+ * Check if network is production (Polygon Mainnet)
+ */
+export function isProductionNetwork(chainId: number): boolean {
+  return chainId === 137;
+}
+
+/**
+ * Check if network is testnet
+ */
+export function isTestnetNetwork(chainId: number): boolean {
+  return chainId === 80001 || chainId === 11155111;
+}
+
+/**
+ * Get contract address for current network
+ */
+export function getContractAddress(chainId: number): `0x${string}` | undefined {
+  // Only return address if on Polygon Mainnet
+  if (chainId === 137) {
+    return CONTRACT_ADDRESS;
+  }
+  return undefined;
+}

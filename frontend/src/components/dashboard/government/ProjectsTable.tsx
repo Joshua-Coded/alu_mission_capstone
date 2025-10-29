@@ -47,6 +47,7 @@ import {
   FiClock,
   FiAlertCircle,
   FiUserCheck,
+  FiMapPin,
 } from 'react-icons/fi';
 
 // ==================== INTERFACES ====================
@@ -109,6 +110,31 @@ const getDaysAgo = (date: Date | string): string => {
   return `${Math.floor(diffDays / 30)}mo ago`;
 };
 
+// Enhanced location formatting
+const formatLocation = (location: string | undefined): string => {
+  if (!location) return 'Location not specified';
+  
+  const trimmedLocation = location.trim();
+  
+  if (trimmedLocation === '') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'unknown') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'none') return 'Location not specified';
+  if (trimmedLocation.toLowerCase() === 'null') return 'Location not specified';
+  
+  // If location is just a city name without country, add Rwanda as default
+  if (!trimmedLocation.includes(',') && !trimmedLocation.includes('-')) {
+    return `${trimmedLocation}, Rwanda`;
+  }
+  
+  return trimmedLocation;
+};
+
+// Extract location for filtering (normalize for search)
+const getLocationForFilter = (location: string | undefined): string => {
+  if (!location) return '';
+  return location.split(',')[0].trim().toLowerCase();
+};
+
 // ==================== MAIN COMPONENT ====================
 export default function ProjectsTable({
   projects = [],
@@ -122,6 +148,7 @@ export default function ProjectsTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
+  const [locationFilter, setLocationFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'date' | 'funding' | 'status'>('date');
   const toast = useToast();
 
@@ -136,7 +163,7 @@ export default function ProjectsTable({
         ? `${project.farmer?.firstName || ''} ${project.farmer?.lastName || ''}`.toLowerCase().includes(searchLower)
         : (project.farmer || '').toLowerCase().includes(searchLower)
       ) ||
-      (project.location || '').toLowerCase().includes(searchLower) ||
+      getLocationForFilter(project.location).includes(searchLower) ||
       (project.category || '').toLowerCase().includes(searchLower);
 
     // Status matching
@@ -147,7 +174,11 @@ export default function ProjectsTable({
     const matchesDepartment = departmentFilter === 'ALL' || 
       (project.department && project.department === departmentFilter);
 
-    return matchesSearch && matchesStatus && matchesDepartment;
+    // Location matching
+    const matchesLocation = locationFilter === 'ALL' || 
+      (project.location && getLocationForFilter(project.location) === locationFilter.toLowerCase());
+
+    return matchesSearch && matchesStatus && matchesDepartment && matchesLocation;
   });
 
   // Sort projects
@@ -180,6 +211,14 @@ export default function ProjectsTable({
   // Get unique values for filters
   const uniqueDepartments = [...new Set(projects.map(p => p.department).filter(Boolean))];
   const uniqueStatuses = [...new Set(projects.map(p => p.status).filter(Boolean))];
+  
+  // Get unique locations (extract city names)
+  const uniqueLocations = [...new Set(
+    projects
+      .map(p => p.location ? getLocationForFilter(p.location) : null)
+      .filter(Boolean)
+      .map(loc => loc!.charAt(0).toUpperCase() + loc!.slice(1))
+  )].sort();
 
   // Extract farmer info safely
   const getFarmerInfo = (project: Project) => {
@@ -202,7 +241,7 @@ export default function ProjectsTable({
     
     try {
       // Create CSV content
-      const headers = ['Project ID', 'Title', 'Category', 'Status', 'Funding Goal', 'Current Funding', 'Location', 'Department', 'Farmer', 'Submitted Date'];
+      const headers = ['Project ID', 'Title', 'Category', 'Status', 'Funding Goal (MATIC)', 'Current Funding (MATIC)', 'Location', 'Department', 'Farmer', 'Submitted Date'];
       const rows = sortedProjects.map(p => {
         const farmerInfo = getFarmerInfo(p);
         return [
@@ -212,7 +251,7 @@ export default function ProjectsTable({
           p.status,
           p.fundingGoal || 0,
           p.currentFunding || 0,
-          `"${p.location}"`,
+          `"${formatLocation(p.location)}"`,
           p.department || 'N/A',
           `"${farmerInfo.name}"`,
           new Date(p.submittedAt || p.createdAt).toLocaleDateString(),
@@ -335,6 +374,23 @@ export default function ProjectsTable({
               </Select>
             )}
 
+            {/* Location Filter */}
+            {uniqueLocations.length > 0 && (
+              <Select
+                size="sm"
+                w={{ base: 'full', md: '160px' }}
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+              >
+                <option value="ALL">All Locations</option>
+                {uniqueLocations.map(location => (
+                  <option key={location} value={location}>
+                    {location}
+                  </option>
+                ))}
+              </Select>
+            )}
+
             <Button
               size="sm"
               leftIcon={<FiDownload />}
@@ -431,9 +487,27 @@ export default function ProjectsTable({
                         </HStack>
                       </Td>
 
-                      {/* Location */}
+                      {/* Location - FIXED */}
                       <Td>
-                        <Text fontSize="sm">{project.location || 'Unknown'}</Text>
+                        <HStack spacing={1}>
+                          <Icon as={FiMapPin} color="red.500" boxSize={3} />
+                          <Box>
+                            <Tooltip label={project.location || 'No location provided'}>
+                              <Text fontSize="sm" noOfLines={1} fontWeight="medium">
+                                {formatLocation(project.location)}
+                              </Text>
+                            </Tooltip>
+                            {!project.location || project.location.toLowerCase() === 'unknown' ? (
+                              <Text fontSize="xs" color="orange.500" fontStyle="italic">
+                                Location required
+                              </Text>
+                            ) : (
+                              <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                                {project.location}
+                              </Text>
+                            )}
+                          </Box>
+                        </HStack>
                       </Td>
 
                       {/* Department */}
@@ -454,10 +528,10 @@ export default function ProjectsTable({
                       {/* Funding Goal */}
                       <Td isNumeric>
                         <Text fontWeight="bold" color="blue.600">
-                          ${project.fundingGoal?.toLocaleString() || '0'}
+                          {project.fundingGoal?.toFixed(2) || '0'} MATIC
                         </Text>
                         <Text fontSize="xs" color="green.600">
-                          ${project.currentFunding?.toLocaleString() || '0'}
+                          {project.currentFunding?.toFixed(2) || '0'} MATIC
                         </Text>
                       </Td>
 
@@ -622,6 +696,7 @@ export default function ProjectsTable({
                 Showing <strong>{sortedProjects.length}</strong> of <strong>{projects.length}</strong> total projects
                 {statusFilter !== 'ALL' && ` • Status: ${normalizeStatusForDisplay(statusFilter)}`}
                 {departmentFilter !== 'ALL' && ` • Dept: ${departmentFilter.replace(/_/g, ' ')}`}
+                {locationFilter !== 'ALL' && ` • Location: ${locationFilter}`}
               </Text>
               {searchTerm && (
                 <Badge colorScheme="purple" fontSize="xs">

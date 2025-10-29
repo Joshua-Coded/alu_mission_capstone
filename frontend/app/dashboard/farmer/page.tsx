@@ -5,6 +5,7 @@ import RouteGuard from "@/components/RouteGuard";
 import TopHeader from "@/components/dashboard/farmer/TopHeader";
 import WalletConnectionGuard from "@/components/WalletConnectionGuard";
 import WalletSync from "@/components/WalletSync";
+import WalletSyncAlert from "@/components/Walletsyncalert";
 import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
@@ -20,6 +21,7 @@ import {
   CropsTab,
   InventoryTab,
   ProfileTab,
+  ActivityTab,
 } from "@/components/dashboard/farmer/FarmerTabs";
 
 import {
@@ -30,6 +32,7 @@ import {
   VStack,
   Text,
 } from '@chakra-ui/react';
+
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -56,6 +59,8 @@ function DashboardContent() {
         return <InventoryTab />;
       case 'profile':
         return <ProfileTab user={user} />;
+      case 'activity':
+        return <ActivityTab />;
       default:
         return <DashboardTab />;
     }
@@ -66,7 +71,7 @@ function DashboardContent() {
 
 export default function FarmerDashboard() {
   const { user, logout } = useAuth();
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 
@@ -79,6 +84,8 @@ export default function FarmerDashboard() {
       <WalletConnectionGuard 
         title="Connect Wallet to Farm Dashboard"
         description="Connect your wallet to create projects, receive funding, and track your farming progress on the blockchain."
+        showNetworkStatus={true}
+        showWithdrawalButton={false}
       >
         <WalletSync />  
         
@@ -95,7 +102,7 @@ export default function FarmerDashboard() {
             sidebarCollapsed={sidebarCollapsed}
           />
           
-          {/* Added width calculation to fill available space */}
+          {/* Main Content Area */}
           <Box 
             ml={sidebarCollapsed ? '70px' : '280px'}
             transition="margin-left 0.3s ease"
@@ -105,7 +112,10 @@ export default function FarmerDashboard() {
             minH="100vh"
             w={`calc(100% - ${sidebarCollapsed ? '70px' : '280px'})`}
           >
+            {/* Wallet Sync Alert */}
+            <WalletSyncAlert />
             
+            {/* Dashboard Content */}
             <Box w="full">
               <Suspense 
                 fallback={

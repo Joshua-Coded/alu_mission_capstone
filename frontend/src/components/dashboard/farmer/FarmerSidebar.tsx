@@ -237,7 +237,7 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
                   <HStack justify="space-between" w="full">
                     <Text fontSize="xs" color="gray.600">Total Funding</Text>
                     <Text fontSize="xs" fontWeight="bold" color="green.600">
-                      ${stats.totalFunding.toLocaleString()}
+                      {stats.totalFunding.toLocaleString()} MATIC {/* ✅ CHANGED: USD to MATIC */}
                     </Text>
                   </HStack>
                 </>

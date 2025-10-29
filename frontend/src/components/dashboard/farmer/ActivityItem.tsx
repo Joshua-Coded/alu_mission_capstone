@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import contributionApi, { Contribution } from "@/lib/contributionApi";
+import { projectApi } from "@/lib/projectApi";
 
 import { 
   FiCheckCircle, 
@@ -26,7 +28,9 @@ import {
   Heading,
   Badge,
   HStack,
+  Button,
 } from '@chakra-ui/react';
+
 
 // Activity type derived from project events
 interface Activity {
@@ -118,7 +122,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
             </Text>
             {activity.amount && (
               <Text color="green.500" fontWeight="bold" fontSize="lg">
-                ${activity.amount.toLocaleString()}
+                {activity.amount.toLocaleString()} MATIC
               </Text>
             )}
             <Text fontSize="sm" color="gray.600" mb={1}>
@@ -145,6 +149,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
 export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadActivities();
@@ -153,21 +158,39 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
   const loadActivities = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Fetch projects from your API
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/projects/my-projects`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
-      });
+      console.log('🔄 Loading farmer activities...');
       
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const projects = await response.json();
+      // Fetch farmer's projects using the API client
+      const projects = await projectApi.getMyProjects();
       
+      console.log('📊 Farmer projects:', projects);
+      
+      if (!projects || projects.length === 0) {
+        console.log('ℹ️ No projects found for farmer');
+        setActivities([]);
+        return;
+      }
+
       // Generate activities from project data
       const generatedActivities: Activity[] = [];
       
-      projects.forEach((project: any) => {
+      // Process each project to generate activities
+      for (const project of projects) {
+        console.log(`📋 Processing project: ${project.title} (${project.status})`);
+        
+        // Project creation activity
+        generatedActivities.push({
+          id: `create-${project._id}`,
+          type: 'milestone',
+          title: 'Project Created',
+          description: `You created project "${project.title}"`,
+          timestamp: new Date(project.createdAt),
+          projectId: project._id,
+          projectTitle: project.title,
+        });
+
         // Project submission activity
         if (project.submittedAt) {
           generatedActivities.push({
@@ -182,7 +205,7 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
         }
         
         // Project verification activity
-        if (project.status === 'active' && project.verification?.verifiedAt) {
+        if ((project.status === 'active' || project.status === 'verified') && project.verification?.verifiedAt) {
           generatedActivities.push({
             id: `verify-${project._id}`,
             type: 'milestone',
@@ -208,16 +231,57 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
         }
         
         // Funding milestone activities
-        if (project.currentFunding > 0) {
-          const fundingPercentage = (project.currentFunding / project.fundingGoal) * 100;
+        const currentFunding = project.currentFunding || 0;
+        const fundingGoal = project.fundingGoal || 1; // Avoid division by zero
+        
+        if (currentFunding > 0) {
+          const fundingPercentage = (currentFunding / fundingGoal) * 100;
           
+          // Get real contributions data for this project
+          try {
+            const contributionsResponse = await contributionApi.getProjectContributions(project._id);
+            if (contributionsResponse.success && contributionsResponse.data) {
+              const contributions = contributionsResponse.data.contributions || [];
+              
+              // Add contributor activity
+              if (contributions.length > 0) {
+                generatedActivities.push({
+                  id: `contributors-${project._id}`,
+                  type: 'contributor',
+                  title: 'New Contributors',
+                  description: `${contributions.length} investor${contributions.length > 1 ? 's' : ''} supporting "${project.title}"`,
+                  timestamp: new Date(project.updatedAt),
+                  projectId: project._id,
+                  projectTitle: project.title,
+                });
+
+                // Add individual investment activities
+                contributions.forEach((contribution: { amountMatic: any; amount: any; contributedAt: any; createdAt: any; }, index: any) => {
+                  generatedActivities.push({
+                    id: `investment-${project._id}-${index}`,
+                    type: 'investment',
+                    title: 'New Investment',
+                    description: `Received ${contribution.amountMatic || contribution.amount} MATIC for "${project.title}"`,
+                    amount: contribution.amountMatic || contribution.amount,
+                    timestamp: new Date(contribution.contributedAt || contribution.createdAt),
+                    projectId: project._id,
+                    projectTitle: project.title,
+                  });
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching contributions:', error);
+          }
+          
+          // Funding milestone activities
           if (fundingPercentage >= 100) {
             generatedActivities.push({
               id: `funded-${project._id}`,
               type: 'milestone',
               title: 'Funding Goal Reached! 🎯',
-              description: `"${project.title}" has reached its funding goal`,
-              amount: project.fundingGoal,
+              description: `"${project.title}" has reached its funding goal of ${fundingGoal.toFixed(4)} MATIC`,
+              amount: fundingGoal,
               timestamp: new Date(project.updatedAt),
               projectId: project._id,
               projectTitle: project.title,
@@ -227,8 +291,8 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
               id: `funding-75-${project._id}`,
               type: 'funding',
               title: 'Nearly There!',
-              description: `"${project.title}" is 75% funded`,
-              amount: project.currentFunding,
+              description: `"${project.title}" is 75% funded (${currentFunding.toFixed(4)} / ${fundingGoal.toFixed(4)} MATIC)`,
+              amount: currentFunding,
               timestamp: new Date(project.updatedAt),
               projectId: project._id,
               projectTitle: project.title,
@@ -239,7 +303,7 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
               type: 'funding',
               title: 'Halfway Funded!',
               description: `"${project.title}" reached 50% of funding goal`,
-              amount: project.currentFunding,
+              amount: currentFunding,
               timestamp: new Date(project.updatedAt),
               projectId: project._id,
               projectTitle: project.title,
@@ -250,25 +314,12 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
               type: 'funding',
               title: 'First Quarter Funded',
               description: `"${project.title}" reached 25% of funding goal`,
-              amount: project.currentFunding,
+              amount: currentFunding,
               timestamp: new Date(project.updatedAt),
               projectId: project._id,
               projectTitle: project.title,
             });
           }
-        }
-        
-        // Contributor activity
-        if (project.contributorsCount > 0) {
-          generatedActivities.push({
-            id: `contributors-${project._id}`,
-            type: 'contributor',
-            title: 'New Contributors',
-            description: `${project.contributorsCount} investor${project.contributorsCount > 1 ? 's' : ''} supporting "${project.title}"`,
-            timestamp: new Date(project.updatedAt),
-            projectId: project._id,
-            projectTitle: project.title,
-          });
         }
         
         // Blockchain activity
@@ -296,7 +347,22 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
             projectTitle: project.title,
           });
         }
-      });
+
+        // Project status changes
+        if (project.updatedAt && project.createdAt !== project.updatedAt) {
+          generatedActivities.push({
+            id: `update-${project._id}`,
+            type: 'milestone',
+            title: 'Project Updated',
+            description: `"${project.title}" was updated`,
+            timestamp: new Date(project.updatedAt),
+            projectId: project._id,
+            projectTitle: project.title,
+          });
+        }
+      }
+      
+      console.log('✅ Generated activities:', generatedActivities.length);
       
       // Sort by timestamp (newest first) and limit
       const sortedActivities = generatedActivities
@@ -304,11 +370,17 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
         .slice(0, limit);
       
       setActivities(sortedActivities);
-    } catch (error) {
-      console.error('Error loading activities:', error);
+      
+    } catch (error: any) {
+      console.error('❌ Error loading activities:', error);
+      setError(error.message || 'Failed to load activities');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = () => {
+    loadActivities();
   };
 
   if (loading) {
@@ -324,6 +396,29 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
     );
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardBody>
+          <VStack py={8} spacing={4}>
+            <Icon as={FiAlertCircle} boxSize={12} color="red.400" />
+            <Text color="gray.600">Failed to load activities</Text>
+            <Text fontSize="sm" color="gray.500" textAlign="center">
+              {error}
+            </Text>
+            <Button 
+              onClick={handleRetry}
+              colorScheme="blue" 
+              size="sm"
+            >
+              Try Again
+            </Button>
+          </VStack>
+        </CardBody>
+      </Card>
+    );
+  }
+
   if (activities.length === 0) {
     return (
       <Card>
@@ -331,9 +426,17 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
           <VStack py={8}>
             <Icon as={FiAlertCircle} boxSize={12} color="gray.400" />
             <Text color="gray.600">No recent activity</Text>
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color="gray.500" textAlign="center">
               Activities will appear here as your projects progress
             </Text>
+            <Button 
+              onClick={handleRetry}
+              colorScheme="green" 
+              size="sm"
+              variant="outline"
+            >
+              Refresh
+            </Button>
           </VStack>
         </CardBody>
       </Card>
@@ -342,10 +445,20 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
 
   return (
     <Card>
-      <CardHeader>
-        <Heading size="md">Recent Activity</Heading>
+      <CardHeader pb={4}>
+        <Flex justify="space-between" align="center">
+          <Heading size="md">Recent Activity</Heading>
+          <Button 
+            onClick={handleRetry}
+            size="sm" 
+            variant="ghost"
+            leftIcon={<Icon as={FiClock} />}
+          >
+            Refresh
+          </Button>
+        </Flex>
       </CardHeader>
-      <CardBody>
+      <CardBody pt={0}>
         <VStack spacing={4} align="stretch">
           {activities.map((activity) => (
             <ActivityItem key={activity.id} activity={activity} />
@@ -356,4 +469,4 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
   );
 };
 
-export default ActivityItem;
+export default ActivityFeed;

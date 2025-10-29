@@ -1,5 +1,6 @@
 "use client";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 import { CreateProjectDto, projectApi } from "../../../lib/projectApi";
 
 import {
@@ -61,11 +62,21 @@ interface FormErrors {
   [key: string]: string;
 }
 
+interface DraftData {
+  formData: CreateProjectDto;
+  projectImages: File[];
+  projectImagePreviews: string[];
+  projectDocuments: File[];
+}
+
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ 
   isOpen, 
   onClose,
   onProjectCreated
 }) => {
+  // ✅ Get farmer's wallet address
+  const { address: walletAddress, isConnected } = useAccount();
+  
   const [activeStep, setActiveStep] = useState(0);
   const toast = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,6 +96,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     location: '',
     images: [],
     documents: [],
+    farmerWalletAddress: '', // ✅ ADDED
   });
 
   const categories = [
@@ -108,6 +120,50 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     'Western Province',
   ];
 
+  // ✅ IMPROVED: Auto-save to localStorage with images and documents
+  useEffect(() => {
+    if (isOpen && (formData.title || formData.description || projectImages.length > 0)) {
+      const draftData: DraftData = {
+        formData,
+        projectImages: [], // Files can't be stored in localStorage
+        projectImagePreviews, // Store previews instead
+        projectDocuments: [], // Files can't be stored in localStorage
+      };
+      
+      localStorage.setItem('draft_project', JSON.stringify(draftData));
+      localStorage.setItem('draft_project_step', activeStep.toString());
+    }
+  }, [formData, isOpen, activeStep, projectImagePreviews]);
+
+  // ✅ IMPROVED: Restore from localStorage with image previews
+  useEffect(() => {
+    if (isOpen) {
+      const savedData = localStorage.getItem('draft_project');
+      const savedStep = localStorage.getItem('draft_project_step');
+      
+      if (savedData) {
+        try {
+          const parsed: DraftData = JSON.parse(savedData);
+          setFormData(parsed.formData);
+          setProjectImagePreviews(parsed.projectImagePreviews || []);
+          
+          toast({
+            title: "Draft Restored",
+            description: "Your previous work has been restored",
+            status: "info",
+            duration: 3000,
+          });
+        } catch (e) {
+          console.error('Error restoring form data:', e);
+        }
+      }
+      
+      if (savedStep) {
+        setActiveStep(parseInt(savedStep));
+      }
+    }
+  }, [isOpen, toast]);
+
   const validateStep = useCallback((step: number): FormErrors => {
     const errors: FormErrors = {};
     
@@ -127,18 +183,18 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         break;
         
       case 2:
-        if (!formData.fundingGoal || formData.fundingGoal < 1000) {
-          errors.fundingGoal = 'Minimum funding goal is $1,000';
+        // ✅ CHANGED: 100 → 5 MATIC minimum
+        if (!formData.fundingGoal || formData.fundingGoal < 5) {
+          errors.fundingGoal = 'Minimum funding goal is 5 MATIC';
         }
-        if (formData.fundingGoal > 1000000) {
-          errors.fundingGoal = 'Maximum funding goal is $1,000,000';
+        if (formData.fundingGoal > 100000) {
+          errors.fundingGoal = 'Maximum funding goal is 100,000 MATIC';
         }
         break;
     }
     
     return errors;
   }, [formData]);
-
   const handleInputChange = useCallback((field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
@@ -201,13 +257,15 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           newPreviews.push(e.target.result as string);
           if (newPreviews.length === validFiles.length) {
             setProjectImagePreviews(prev => [...prev, ...newPreviews]);
+            setProjectImages(prev => [...prev, ...validFiles]);
           }
         }
       };
       reader.readAsDataURL(file);
     });
 
-    setProjectImages(prev => [...prev, ...validFiles]);
+    // Clear the input to allow uploading same files again
+    event.target.value = '';
   }, [projectImages, toast]);
 
   const handleDocumentUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,6 +306,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     });
 
     setProjectDocuments(prev => [...prev, ...validFiles]);
+    
+    // Clear the input to allow uploading same files again
+    event.target.value = '';
   }, [toast]);
 
   const removeImage = useCallback((index: number) => {
@@ -318,6 +379,18 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    // ✅ ADDED: Check wallet connection
+    if (!isConnected || !walletAddress) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your MetaMask wallet to submit a project",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+      return;
+    }
+
     const errors = validateStep(activeStep);
     setFormErrors(errors);
     
@@ -336,13 +409,19 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     try {
       const { imageUrls, documentData } = await uploadFiles();
 
+      // ✅ ADDED: Include farmer wallet address
       const projectData: CreateProjectDto = {
         ...formData,
         images: imageUrls,
         documents: documentData,
+        farmerWalletAddress: walletAddress,
       };
       
       await projectApi.createProject(projectData);
+      
+      // ✅ ADDED: Clear localStorage after success
+      localStorage.removeItem('draft_project');
+      localStorage.removeItem('draft_project_step');
       
       toast({
         title: "Project Submitted!",
@@ -384,12 +463,31 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       location: '',
       images: [],
       documents: [],
+      farmerWalletAddress: '',
     });
     setProjectImages([]);
     setProjectImagePreviews([]);
     setProjectDocuments([]);
     setActiveStep(0);
     setFormErrors({});
+    
+    // Clear localStorage
+    localStorage.removeItem('draft_project');
+    localStorage.removeItem('draft_project_step');
+  };
+
+  // ✅ IMPROVED: Custom close handler with confirmation
+  const handleClose = () => {
+    const hasData = formData.title || formData.description || projectImages.length > 0 || projectImagePreviews.length > 0;
+    
+    if (hasData && !isSubmitting) {
+      const confirmed = window.confirm(
+        'Your progress has been saved as a draft. Close anyway?'
+      );
+      if (!confirmed) return;
+    }
+    
+    onClose();
   };
 
   const getStepTitle = () => {
@@ -411,7 +509,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               <FormLabel fontWeight="semibold">Project Title</FormLabel>
               <Input
                 size="lg"
-                placeholder="e.g., Organic Tomato Farming 2025"
+                placeholder="e.g., Modern Cassava Processing Factory"
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
               />
@@ -648,28 +746,62 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </VStack>
         );
 
-      case 2:
+        case 2:
+          return (
+            <VStack spacing={6} align="stretch">
+              <FormControl isRequired isInvalid={!!formErrors.fundingGoal}>
+                <FormLabel fontWeight="semibold">
+                  <HStack>
+                    <Icon as={FiDollarSign} />
+                    <Text>Funding Goal (MATIC)</Text>
+                  </HStack>
+                </FormLabel>
+                <NumberInput
+                  size="lg"
+                  min={5} 
+                  max={100000}
+                  value={formData.fundingGoal}
+                  onChange={(value) => handleInputChange('fundingGoal', parseInt(value) || 0)}
+                >
+                  <NumberInputField placeholder="10" />
+                </NumberInput>
+                <FormErrorMessage>{formErrors.fundingGoal}</FormErrorMessage>
+                <FormHelperText>
+                  Minimum: 5 MATIC | Maximum: 100,000 MATIC
+                </FormHelperText>
+              </FormControl>
+        
+              <Alert status="info" borderRadius="lg" variant="left-accent">
+                <AlertIcon />
+                <AlertDescription fontSize="sm">
+                  Consider costs for seeds, equipment, labor, irrigation, fertilizers, 
+                  and a contingency buffer (10-15% of total).
+                </AlertDescription>
+              </Alert>
+            </VStack>
+          );
         return (
           <VStack spacing={6} align="stretch">
             <FormControl isRequired isInvalid={!!formErrors.fundingGoal}>
               <FormLabel fontWeight="semibold">
                 <HStack>
                   <Icon as={FiDollarSign} />
-                  <Text>Funding Goal (USD)</Text>
+                  <Text>Funding Goal (MATIC)</Text> {/* ✅ CHANGED: USD to MATIC */}
                 </HStack>
               </FormLabel>
               <NumberInput
                 size="lg"
-                min={1000}
-                max={1000000}
+                min={100} 
+                max={100000} 
                 value={formData.fundingGoal}
                 onChange={(value) => handleInputChange('fundingGoal', parseInt(value) || 0)}
               >
-                <NumberInputField placeholder="10000" />
+                <NumberInputField placeholder="1000" />
               </NumberInput>
               <FormErrorMessage>{formErrors.fundingGoal}</FormErrorMessage>
               <FormHelperText>
-                Range: $1,000 - $1,000,000
+                {/* ✅ CHANGED: USD to MATIC */}
+                Range: 100 - 100,000 MATIC
               </FormHelperText>
             </FormControl>
 
@@ -686,69 +818,95 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       case 3:
         return (
           <VStack spacing={6} align="stretch">
-            <Alert status="success" borderRadius="lg" variant="left-accent">
+            {/* ✅ ADDED: Wallet Status */}
+            <Alert 
+              status={isConnected ? "success" : "warning"} 
+              borderRadius="lg" 
+              variant="left-accent"
+            >
               <AlertIcon />
-              <AlertDescription>
-                Your project will be submitted to government officials for verification 
-                and review before becoming visible to investors.
-              </AlertDescription>
+              <Box flex="1">
+                <AlertDescription fontSize="sm">
+                  {isConnected ? (
+                    <>
+                      <Text fontWeight="bold">✅ Wallet Connected</Text>
+                      <Text fontSize="xs" fontFamily="mono" mt={1}>
+                        {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600" mt={1}>
+                        This wallet will receive funds when your project is completed
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text fontWeight="bold">⚠️ Wallet Not Connected</Text>
+                      <Text fontSize="xs" mt={1}>
+                        Please connect your MetaMask wallet before submitting
+                      </Text>
+                    </>
+                  )}
+                </AlertDescription>
+              </Box>
             </Alert>
 
-            <Box p={6} bg="gray.50" borderRadius="xl" border="1px" borderColor="gray.200">
-              <Text fontSize="lg" fontWeight="bold" mb={4} color="gray.700">
-                Project Summary
-              </Text>
-              
+            {/* Project Summary */}
+            <Box p={6} bg="gray.50" borderRadius="lg" border="1px" borderColor="gray.200">
               <VStack spacing={4} align="stretch">
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>TITLE</Text>
-                    <Text fontWeight="semibold">{formData.title || '—'}</Text>
-                  </Box>
-                  
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>CATEGORY</Text>
-                    <Badge colorScheme="green" fontSize="sm">
-                      {formData.category?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || '—'}
-                    </Badge>
-                  </Box>
-                  
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>LOCATION</Text>
-                    <Text fontWeight="semibold">{formData.location || '—'}</Text>
-                  </Box>
-                  
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>TIMELINE</Text>
-                    <Text fontWeight="semibold">{formData.timeline || '—'}</Text>
-                  </Box>
-                  
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>FUNDING GOAL</Text>
-                    <Text fontWeight="bold" color="green.600" fontSize="xl">
-                      ${formData.fundingGoal.toLocaleString()}
-                    </Text>
-                  </Box>
-
-                  <Box>
-                    <Text fontSize="xs" color="gray.500" mb={1}>ATTACHMENTS</Text>
-                    <HStack spacing={3}>
-                      <Badge colorScheme="purple">{projectImages.length} Images</Badge>
-                      <Badge colorScheme="blue">{projectDocuments.length} Docs</Badge>
-                    </HStack>
-                  </Box>
-                </SimpleGrid>
-
+                <Text fontSize="lg" fontWeight="bold">📋 Project Summary</Text>
+                
                 <Divider />
-
-                <Box>
-                  <Text fontSize="xs" color="gray.500" mb={2}>DESCRIPTION</Text>
-                  <Text fontSize="sm" color="gray.700" lineHeight="tall">
-                    {formData.description || '—'}
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Title:</Text>
+                  <Text>{formData.title}</Text>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Category:</Text>
+                  <Badge colorScheme="green">
+                    {formData.category.replace(/_/g, ' ')}
+                  </Badge>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Location:</Text>
+                  <Text>{formData.location}</Text>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Timeline:</Text>
+                  <Text>{formData.timeline}</Text>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Funding Goal:</Text>
+                  {/* ✅ CHANGED: USD to MATIC */}
+                  <Text fontWeight="bold" fontSize="lg" color="green.600">
+                    {formData.fundingGoal.toLocaleString()} MATIC
                   </Text>
-                </Box>
+                </HStack>
+                
+                <Divider />
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Images:</Text>
+                  <Badge>{projectImages.length} uploaded</Badge>
+                </HStack>
+                
+                <HStack justify="space-between">
+                  <Text fontWeight="medium">Documents:</Text>
+                  <Badge>{projectDocuments.length} uploaded</Badge>
+                </HStack>
               </VStack>
             </Box>
+
+            <Alert status="info" borderRadius="lg" variant="left-accent">
+              <AlertIcon />
+              <AlertDescription fontSize="sm">
+                Your project will be reviewed by the government before being published. 
+                This typically takes 2-5 business days.
+              </AlertDescription>
+            </Alert>
           </VStack>
         );
 
@@ -757,108 +915,89 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     }
   };
 
-  const isStepValid = () => {
-    const errors = validateStep(activeStep);
-    return Object.keys(errors).length === 0;
-  };
-
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="4xl" closeOnOverlayClick={false}>
-      <ModalOverlay backdropFilter="blur(10px)" bg="blackAlpha.400" />
-      <ModalContent maxH="90vh" overflowY="auto" mx={4}>
-        <ModalHeader borderBottom="1px" borderColor="gray.200" pb={4}>
-          <VStack align="start" spacing={3}>
-            <HStack spacing={4} justify="space-between" w="full">
-              <Text fontSize="xl" fontWeight="bold">
-                Create New Project
-              </Text>
-              <Badge colorScheme="blue" fontSize="sm" px={3} py={1}>
-                Step {activeStep + 1} of 4
-              </Badge>
+    <Modal 
+      isOpen={isOpen} 
+      onClose={handleClose} // ✅ CHANGED: Use custom close handler
+      size="4xl"
+      closeOnOverlayClick={false} // ✅ ADDED: Prevent accidental closes
+      closeOnEsc={false} // ✅ ADDED: Prevent ESC key closing
+    >
+      <ModalOverlay />
+      <ModalContent maxH="90vh">
+        <ModalHeader>
+          <VStack align="stretch" spacing={3}>
+            <HStack justify="space-between">
+              <Text>Create New Project</Text>
+              <ModalCloseButton position="relative" top={0} right={0} />
             </HStack>
             
-            <Box w="full">
-              <Progress 
-                value={((activeStep + 1) / 4) * 100} 
-                colorScheme="green" 
-                size="sm" 
-                borderRadius="full" 
-              />
-              <Text fontSize="sm" color="gray.600" mt={2}>
-                {getStepTitle()}
-              </Text>
-            </Box>
+            {/* Progress Steps */}
+            <HStack spacing={2}>
+              {[0, 1, 2, 3].map((step) => (
+                <Box
+                  key={step}
+                  flex={1}
+                  h="2"
+                  bg={activeStep >= step ? 'green.500' : 'gray.200'}
+                  borderRadius="full"
+                  transition="all 0.3s"
+                />
+              ))}
+            </HStack>
+            
+            <Text fontSize="md" color="gray.600" fontWeight="normal">
+              Step {activeStep + 1} of 4: {getStepTitle()}
+            </Text>
           </VStack>
         </ModalHeader>
-        <ModalCloseButton />
 
-        <ModalBody py={6}>
+        <ModalBody pb={6}>
           <VStack spacing={6} align="stretch">
-            <Box minH="400px">
-              {renderStepContent()}
-            </Box>
-
+            {/* Upload Progress */}
             {isUploading && (
-              <Box p={4} bg="blue.50" borderRadius="lg">
-                <Text fontSize="sm" fontWeight="medium" mb={2} color="blue.700">
-                  Uploading files...
-                </Text>
-                <Progress value={uploadProgress} colorScheme="blue" size="sm" borderRadius="full" />
+              <Box>
+                <Text fontSize="sm" mb={2}>Uploading files...</Text>
+                <Progress value={uploadProgress} colorScheme="green" size="sm" />
               </Box>
             )}
 
-            <Divider />
+            {/* Step Content */}
+            {renderStepContent()}
 
-            <Stack direction={{ base: 'column', md: 'row' }} justify="space-between" spacing={3}>
+            {/* Navigation Buttons */}
+            <HStack justify="space-between" pt={4}>
               <Button
                 leftIcon={<FiArrowLeft />}
                 onClick={handlePrevious}
-                isDisabled={activeStep === 0}
-                variant="outline"
-                size="lg"
+                isDisabled={activeStep === 0 || isSubmitting}
+                variant="ghost"
               >
                 Previous
               </Button>
 
-              <HStack spacing={3}>
-                <Button 
-                  variant="ghost" 
-                  onClick={onClose}
-                  size="lg"
+              {activeStep < 3 ? (
+                <Button
+                  rightIcon={<FiArrowRight />}
+                  onClick={handleNext}
+                  colorScheme="green"
+                  isDisabled={isSubmitting}
                 >
-                  Cancel
+                  Next
                 </Button>
-                
-                {activeStep < 3 ? (
-                  <Button
-                    rightIcon={<FiArrowRight />}
-                    colorScheme="green"
-                    onClick={handleNext}
-                    isDisabled={!isStepValid()}
-                    size="lg"
-                  >
-                    Continue
-                  </Button>
-                ) : (
-                  <Tooltip 
-                    label={!isStepValid() ? "Please complete all required fields" : ""} 
-                    isDisabled={isStepValid()}
-                  >
-                    <Button
-                      leftIcon={<FiSend />}
-                      colorScheme="green"
-                      onClick={handleSubmit}
-                      isLoading={isSubmitting || isUploading}
-                      loadingText={isUploading ? "Uploading..." : "Submitting..."}
-                      isDisabled={!isStepValid()}
-                      size="lg"
-                    >
-                      Submit Project
-                    </Button>
-                  </Tooltip>
-                )}
-              </HStack>
-            </Stack>
+              ) : (
+                <Button
+                  rightIcon={<FiSend />}
+                  onClick={handleSubmit}
+                  colorScheme="green"
+                  isLoading={isSubmitting || isUploading}
+                  loadingText="Submitting..."
+                  isDisabled={!isConnected}
+                >
+                  Submit Project
+                </Button>
+              )}
+            </HStack>
           </VStack>
         </ModalBody>
       </ModalContent>

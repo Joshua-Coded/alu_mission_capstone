@@ -6,12 +6,14 @@ export enum UserRole {
   FARMER = 'FARMER', 
   GOVERNMENT_OFFICIAL = 'GOVERNMENT_OFFICIAL', 
   CONTRIBUTOR = 'CONTRIBUTOR',
+  INVESTOR = 'INVESTOR',
 }
 
 export enum ProjectStatus {
   SUBMITTED = 'submitted', 
   UNDER_REVIEW = 'under_review',
   ACTIVE = 'active',
+  VERIFIED = 'verified',
   REJECTED = 'rejected',
   FUNDED = 'funded',
   CLOSED = 'closed',
@@ -42,7 +44,6 @@ export enum ProjectCategory {
   GENERAL_AGRICULTURE = 'GENERAL_AGRICULTURE'
 }
 
-// ✅ PROPER DOCUMENT TYPES
 export interface ProjectDocument {
   name: string;
   url: string;
@@ -71,7 +72,7 @@ export interface User {
 }
 
 export interface DueDiligence {
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
   assignedTo?: User;
   startedAt?: Date;
   completedAt?: Date;
@@ -84,6 +85,7 @@ export interface Verification {
   verifiedAt?: Date;
   documentHash?: string;
   rejectionReason?: string;
+  notes?: string;
 }
 
 export interface Project {
@@ -93,8 +95,11 @@ export interface Project {
   description: string;
   category: string; 
   fundingGoal: number;
+  fundingGoalMatic?: number;
   currentFunding: number;
-  timeline: string; 
+  currentFundingMatic?: number;
+  currency?: string;
+  timeline: string;
   location: string;
   images: string[];
   documents: ProjectDocument[];
@@ -115,6 +120,12 @@ export interface Project {
   blockchainCreatedAt?: Date;
   isBlockchainFunded?: boolean;
   blockchainFundedAt?: Date;
+  farmerWalletAddress?: string;
+
+  // Virtual fields from backend
+  fundingProgress?: number;
+  fundingGoalFormatted?: string;
+  currentFundingFormatted?: string;
 }
 
 export interface DepartmentProjectsResponse {
@@ -131,6 +142,36 @@ export interface DepartmentRecommendations {
   departmentOfficials: any[];
 }
 
+// ✅ ADDED: New interfaces based on backend analysis
+export interface GovernmentDashboard {
+  totalProjects: number;
+  pendingReview: number;
+  verifiedProjects: number;
+  departmentBreakdown: Array<{
+    department: GovernmentDepartment;
+    count: number;
+  }>;
+  recentActivity: any[];
+  totalFunding: number;
+  activeProjects: number;
+}
+
+export interface ProjectStats {
+  totalProjects: number;
+  activeProjects: number;
+  fundedProjects: number;
+  totalFunding: number;
+  totalContributors: number;
+  successRate: number;
+  pendingReview: number;
+  recentActivity: any[];
+  departmentStats?: Array<{
+    department: GovernmentDepartment;
+    count: number;
+    funding: number;
+  }>;
+}
+
 export interface CreateProjectDto {
   title: string;
   description: string;
@@ -138,8 +179,9 @@ export interface CreateProjectDto {
   fundingGoal: number;
   timeline: string;
   location: string;
-  images: string[];
-  documents: ProjectDocument[];
+  images?: string[];
+  documents?: ProjectDocument[];
+  farmerWalletAddress: string; 
 }
 
 export interface UpdateProjectDto {
@@ -172,9 +214,14 @@ export interface PlatformStats {
   activeProjects: number;
   fundedProjects: number;
   totalFunding: number;
+  totalFundingMatic?: number;
+  totalFundingFormatted?: string;
   pendingReview: number;
   rejectedProjects: number;
   averageProcessingTime: string;
+  currency?: string;
+  totalContributors?: number; // ✅ ADDED: Missing field
+  successRate?: number; // ✅ ADDED: Missing field
 }
 
 export interface UploadResponse {
@@ -201,17 +248,35 @@ export interface BlockchainProjectStatus {
   projectId?: number;
   isCompleted?: boolean;
   isFunded?: boolean;
-  totalFunding?: string;
-  fundingGoal?: string;
+  totalFunding?: number;
+  fundingGoal?: number;
   canComplete?: boolean;
   localFunding?: number;
   localStatus?: ProjectStatus;
   message?: string;
   error?: string;
+  currency?: string;
+  network?: string;
+  chainId?: number;
 }
 
 export interface BlockchainCompletionResponse {
   txHash: string;
+}
+
+export interface CreateProjectResponse extends Project {
+  categorization?: any;
+  message: string;
+}
+
+export interface DebugProjectInfo {
+  id: string;
+  title: string;
+  status: string;
+  farmer: any;
+  farmerId: any;
+  farmerWallet: string;
+  createdAt: string;
 }
 
 // ==================== API CLIENT ====================
@@ -254,6 +319,9 @@ class ProjectApiClient {
         
         if (error.response?.status === 401) {
           this.clearToken();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/login';
+          }
         }
 
         const errorMessage = error.response?.data?.message || error.message || 'Unknown error occurred';
@@ -293,8 +361,8 @@ class ProjectApiClient {
 
   // ==================== FARMER ENDPOINTS ====================
 
-  async createProject(data: CreateProjectDto): Promise<Project> {
-    const response = await this.api.post<Project>('/projects', data);
+  async createProject(data: CreateProjectDto): Promise<CreateProjectResponse> {
+    const response = await this.api.post<CreateProjectResponse>('/projects', data);
     return response.data;
   }
 
@@ -321,26 +389,31 @@ class ProjectApiClient {
     return response.data;
   }
 
+  // ✅ CORRECTED: This endpoint exists in your backend
   async getAllProjectsForGovernment(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/government/dashboard');
     return response.data;
   }
 
+  // ✅ CORRECTED: This endpoint exists in your backend
   async getProjectsByDepartment(department: GovernmentDepartment): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>(`/projects/department/${department}`);
     return response.data;
   }
 
+  // ✅ CORRECTED: This endpoint exists in your backend
   async getMyDepartmentProjects(): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>('/projects/my-department');
     return response.data;
   }
 
+  // ✅ CORRECTED: This endpoint exists in your backend
   async getDepartmentRecommendations(category: ProjectCategory): Promise<DepartmentRecommendations> {
     const response = await this.api.get<DepartmentRecommendations>(`/projects/department-recommendations/${category}`);
     return response.data;
   }
 
+  // ✅ CORRECTED: This endpoint exists in your backend
   async getPendingProjects(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/pending/review');
     return response.data;
@@ -419,6 +492,18 @@ class ProjectApiClient {
     return response.data;
   }
 
+  // ✅ ADDED: Get government-specific dashboard stats
+  async getGovernmentDashboardStats(): Promise<GovernmentDashboard> {
+    const response = await this.api.get<GovernmentDashboard>('/projects/government/dashboard');
+    return response.data;
+  }
+
+  // ✅ ADDED: Get detailed project statistics
+  async getProjectStatistics(): Promise<ProjectStats> {
+    const response = await this.api.get<ProjectStats>('/projects/stats/dashboard');
+    return response.data;
+  }
+
   // ==================== UPLOAD ENDPOINTS ====================
 
   async uploadImage(file: File): Promise<UploadResponse> {
@@ -463,11 +548,34 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // ==================== DEBUG ENDPOINTS ====================
+  // ==================== DEBUG & TESTING ENDPOINTS ====================
 
   async debugUserInfo(): Promise<any> {
     const response = await this.api.get('/projects/debug/user-info');
     return response.data;
+  }
+
+  async debugAllProjects(): Promise<DebugProjectInfo[]> {
+    const response = await this.api.get<DebugProjectInfo[]>('/projects/debug/all');
+    return response.data;
+  }
+
+  // ✅ ADDED: Test API connectivity
+  async testConnection(): Promise<{ success: boolean; message: string; timestamp?: string }> {
+    try {
+      const response = await this.api.get('/health');
+      return {
+        success: true,
+        message: 'API connection successful',
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || 'API connection failed',
+        timestamp: new Date().toISOString()
+      };
+    }
   }
 
   // ==================== BLOCKCHAIN METHODS ====================
@@ -483,28 +591,269 @@ class ProjectApiClient {
     return response.data;
   }
 
+  /**
+   * Get project with blockchain status check
+   */
+  async getProjectWithBlockchainStatus(id: string): Promise<{
+    project: Project;
+    blockchainEnabled: boolean;
+    blockchainInfo?: BlockchainProjectStatus;
+    message?: string;
+  }> {
+    try {
+      const project = await this.getProjectById(id);
+      const blockchainStatus = await this.getBlockchainStatus(id);
+      
+      return {
+        project,
+        blockchainEnabled: blockchainStatus.blockchainEnabled,
+        blockchainInfo: blockchainStatus.blockchainEnabled ? blockchainStatus : undefined,
+        message: blockchainStatus.message
+      };
+    } catch (error: any) {
+      const project = await this.getProjectById(id);
+      return {
+        project,
+        blockchainEnabled: false,
+        message: 'Blockchain data unavailable'
+      };
+    }
+  }
+
+  /**
+   * Check if project is ready for contributions
+   */
+  async isProjectReadyForContributions(projectId: string): Promise<{
+    ready: boolean;
+    reason?: string;
+    project?: Project;
+    blockchainInfo?: BlockchainProjectStatus;
+  }> {
+    try {
+      const { project, blockchainEnabled, blockchainInfo } = await this.getProjectWithBlockchainStatus(projectId);
+      
+      if (project.status !== 'active' && project.status !== 'verified') {
+        return { 
+          ready: false, 
+          reason: `Project is ${project.status}. Only active projects can receive contributions.`,
+          project
+        };
+      }
+      
+      if (!blockchainEnabled) {
+        return { 
+          ready: false, 
+          reason: 'Blockchain integration not available for this project.',
+          project
+        };
+      }
+      
+      if (!project.blockchainProjectId && project.blockchainProjectId !== 0) {
+        return { 
+          ready: false, 
+          reason: 'Project not yet deployed to blockchain. Please try again later.',
+          project
+        };
+      }
+      
+      if (project.blockchainStatus !== 'created') {
+        return { 
+          ready: false, 
+          reason: `Blockchain deployment status: ${project.blockchainStatus}. Please wait for deployment to complete.`,
+          project
+        };
+      }
+      
+      if (blockchainInfo?.isFunded) {
+        return { 
+          ready: false, 
+          reason: 'Project is already fully funded on blockchain.',
+          project,
+          blockchainInfo
+        };
+      }
+      
+      return { 
+        ready: true, 
+        project,
+        blockchainInfo
+      };
+    } catch (error: any) {
+      return { 
+        ready: false, 
+        reason: error.message || 'Failed to check project status' 
+      };
+    }
+  }
+
+  /**
+   * Get funding progress with blockchain data
+   */
+  async getFundingProgress(projectId: string): Promise<{
+    currentFunding: number;
+    fundingGoal: number;
+    progressPercentage: number;
+    blockchainFunding?: number;
+    isFullyFunded: boolean;
+    currency: string;
+    message?: string;
+  }> {
+    try {
+      const { project, blockchainInfo } = await this.getProjectWithBlockchainStatus(projectId);
+      
+      const currentFunding = blockchainInfo?.totalFunding || project.currentFunding;
+      const fundingGoal = blockchainInfo?.fundingGoal || project.fundingGoal;
+      const progressPercentage = fundingGoal > 0 ? (currentFunding / fundingGoal) * 100 : 0;
+      
+      return {
+        currentFunding,
+        fundingGoal,
+        progressPercentage,
+        blockchainFunding: blockchainInfo?.totalFunding,
+        isFullyFunded: progressPercentage >= 100,
+        currency: 'MATIC',
+        message: blockchainInfo?.message
+      };
+    } catch (error: any) {
+      const project = await this.getProjectById(projectId);
+      const progressPercentage = project.fundingGoal > 0 ? (project.currentFunding / project.fundingGoal) * 100 : 0;
+      
+      return {
+        currentFunding: project.currentFunding,
+        fundingGoal: project.fundingGoal,
+        progressPercentage,
+        isFullyFunded: progressPercentage >= 100,
+        currency: 'MATIC',
+        message: 'Using local data only - blockchain unavailable'
+      };
+    }
+  }
+
+  // ==================== UTILITY METHODS ====================
+
+  /**
+   * Format MATIC amount with currency
+   */
+  formatMaticAmount(amount: number): string {
+    return `${amount} MATIC`;
+  }
+
+  /**
+   * Validate wallet address format
+   */
+  isValidWalletAddress(address: string): boolean {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
+  }
+
+  /**
+   * Get project status color for UI
+   */
+  getStatusColor(status: ProjectStatus): string {
+    const statusColors = {
+      [ProjectStatus.SUBMITTED]: 'blue',
+      [ProjectStatus.UNDER_REVIEW]: 'orange', 
+      [ProjectStatus.ACTIVE]: 'green',
+      [ProjectStatus.VERIFIED]: 'green',
+      [ProjectStatus.REJECTED]: 'red',
+      [ProjectStatus.FUNDED]: 'purple',
+      [ProjectStatus.CLOSED]: 'gray'
+    };
+    return statusColors[status] || 'gray';
+  }
+
+  /**
+   * Get project status text for UI
+   */
+  getStatusText(status: ProjectStatus): string {
+    const statusTexts = {
+      [ProjectStatus.SUBMITTED]: 'Submitted',
+      [ProjectStatus.UNDER_REVIEW]: 'Under Review',
+      [ProjectStatus.ACTIVE]: 'Active',
+      [ProjectStatus.VERIFIED]: 'Verified', 
+      [ProjectStatus.REJECTED]: 'Rejected',
+      [ProjectStatus.FUNDED]: 'Funded',
+      [ProjectStatus.CLOSED]: 'Closed'
+    };
+    return statusTexts[status] || status;
+  }
+
+  /**
+   * ✅ ADDED: Get department display name
+   */
+  getDepartmentDisplayName(department: GovernmentDepartment): string {
+    const departmentNames = {
+      [GovernmentDepartment.POULTRY]: 'Poultry',
+      [GovernmentDepartment.CROPS]: 'Crops',
+      [GovernmentDepartment.LIVESTOCK]: 'Livestock',
+      [GovernmentDepartment.FISHERIES]: 'Fisheries',
+      [GovernmentDepartment.HORTICULTURE]: 'Horticulture',
+      [GovernmentDepartment.AGRIBUSINESS]: 'Agribusiness',
+      [GovernmentDepartment.SUSTAINABILITY]: 'Sustainability',
+      [GovernmentDepartment.COMPLIANCE]: 'Compliance',
+      [GovernmentDepartment.GENERAL]: 'General Agriculture'
+    };
+    return departmentNames[department] || department;
+  }
+
+  /**
+   * ✅ ADDED: Get category display name
+   */
+  getCategoryDisplayName(category: ProjectCategory): string {
+    const categoryNames = {
+      [ProjectCategory.POULTRY_FARMING]: 'Poultry Farming',
+      [ProjectCategory.CROP_PRODUCTION]: 'Crop Production',
+      [ProjectCategory.LIVESTOCK_FARMING]: 'Livestock Farming',
+      [ProjectCategory.FISH_FARMING]: 'Fish Farming',
+      [ProjectCategory.VEGETABLE_FARMING]: 'Vegetable Farming',
+      [ProjectCategory.FRUIT_FARMING]: 'Fruit Farming',
+      [ProjectCategory.AGRO_PROCESSING]: 'Agro Processing',
+      [ProjectCategory.SUSTAINABLE_AGRICULTURE]: 'Sustainable Agriculture',
+      [ProjectCategory.ORGANIC_FARMING]: 'Organic Farming',
+      [ProjectCategory.GENERAL_AGRICULTURE]: 'General Agriculture'
+    };
+    return categoryNames[category] || category;
+  }
+
+  // ==================== DEPRECATED METHODS ====================
+
+  /**
+   * @deprecated Use getProjectWithBlockchainStatus instead
+   */
   async completeProjectOnBlockchain(projectId: string): Promise<BlockchainCompletionResponse> {
+    console.warn('completeProjectOnBlockchain is deprecated - projects complete automatically when funded');
     const response = await this.api.post<BlockchainCompletionResponse>(
       `/projects/${projectId}/complete-blockchain`
     );
     return response.data;
   }
 
+  /**
+   * @deprecated Use getBlockchainStatus instead
+   */
   async checkAndUpdateProjectCompletion(projectId: string): Promise<Project> {
+    console.warn('checkAndUpdateProjectCompletion is deprecated - use getBlockchainStatus');
     const response = await this.api.post<Project>(
       `/projects/${projectId}/check-completion`
     );
     return response.data;
   }
 
+  /**
+   * @deprecated Blockchain sync happens automatically
+   */
   async syncBlockchainStatus(projectId: string): Promise<{ message: string }> {
+    console.warn('syncBlockchainStatus is deprecated - blockchain sync happens automatically');
     const response = await this.api.post<{ message: string }>(
       `/projects/${projectId}/sync-blockchain`
     );
     return response.data;
   }
 
+  /**
+   * @deprecated Use createProject instead - blockchain creation is automatic
+   */
   async createProjectWithBlockchain(data: CreateProjectDto): Promise<Project & { blockchainStatus: string }> {
+    console.warn('createProjectWithBlockchain is deprecated - use createProject, blockchain creation is automatic');
     const response = await this.api.post<Project & { blockchainStatus: string }>('/projects', data);
     return response.data;
   }
@@ -533,11 +882,11 @@ export interface FundingProgress {
   currentFunding: number;
   fundingGoal: number;
   progressPercentage: number;
-  blockchainFunding?: string;
+  blockchainFunding?: number;
   isFullyFunded: boolean;
+  currency: string;
 }
 
-// Export singleton instance
 export const projectApi = new ProjectApiClient();
 
 export default ProjectApiClient;

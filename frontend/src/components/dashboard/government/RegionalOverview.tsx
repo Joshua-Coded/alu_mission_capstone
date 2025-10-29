@@ -1,6 +1,7 @@
-import { useMemo } from "react";
-import { FiMapPin, FiTrendingUp } from "react-icons/fi";
-import { Project } from "@/lib/projectApi";
+import  contributionApi  from "@/lib/contributionApi";
+import { useEffect, useMemo, useState } from "react";
+import { FiMapPin, FiRefreshCw, FiTrendingUp } from "react-icons/fi";
+import { Project, projectApi } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/dashboard/government/RegionalOverview.tsx
@@ -25,26 +26,80 @@ import {
   Box,
   Tooltip,
   Progress,
+  Button,
+  Spinner,
+  useToast,
+  VStack,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 
 interface RegionalOverviewProps {
   projects: Project[];
+  onRefresh?: () => void;
 }
 
 interface RegionalData {
   region: string;
   projects: number;
   totalFunding: number;
+  currentFunding: number;
   avgFunding: number;
   approvedProjects: number;
   pendingProjects: number;
-  farmers: Set<string>; // Unique farmer IDs
+  fundedProjects: number;
+  farmers: Set<string>;
   approvalRate: number;
+  fundingProgress: number;
+  contributors: number;
 }
 
-export default function RegionalOverview({ projects }: RegionalOverviewProps) {
+export default function RegionalOverview({ projects, onRefresh }: RegionalOverviewProps) {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const [loading, setLoading] = useState(false);
+  const [regionalContributions, setRegionalContributions] = useState<Map<string, number>>(new Map());
+  const toast = useToast();
+
+  // Fetch contribution data for each region
+  useEffect(() => {
+    fetchRegionalContributionData();
+  }, [projects]);
+
+  const fetchRegionalContributionData = async () => {
+    try {
+      setLoading(true);
+      const contributionsMap = new Map<string, number>();
+
+      // Get contributions for each project to calculate regional contributor counts
+      for (const project of projects) {
+        try {
+          const region = project.location?.split(',')[0]?.trim() || 'Unknown';
+          const contributionsResponse = await contributionApi.getProjectContributions(project._id);
+          
+          if (contributionsResponse.success && contributionsResponse.data) {
+            const currentCount = contributionsMap.get(region) || 0;
+            const projectContributors = contributionsResponse.data.contributorCount || 0;
+            contributionsMap.set(region, currentCount + projectContributors);
+          }
+        } catch (error) {
+          console.error(`Error fetching contributions for project ${project._id}:`, error);
+        }
+      }
+
+      setRegionalContributions(contributionsMap);
+    } catch (error: any) {
+      console.error('Error fetching regional contribution data:', error);
+      toast({
+        title: 'Error loading contribution data',
+        description: 'Some statistics may be incomplete',
+        status: 'warning',
+        duration: 3000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Calculate regional statistics from projects
   const regionalData = useMemo(() => {
@@ -59,23 +114,30 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
           region,
           projects: 0,
           totalFunding: 0,
+          currentFunding: 0,
           avgFunding: 0,
           approvedProjects: 0,
           pendingProjects: 0,
+          fundedProjects: 0,
           farmers: new Set(),
           approvalRate: 0,
+          fundingProgress: 0,
+          contributors: regionalContributions.get(region) || 0,
         });
       }
 
       const data = dataMap.get(region)!;
       data.projects++;
       data.totalFunding += project.fundingGoal;
+      data.currentFunding += project.currentFunding || 0;
       
-      if (project.status === 'active' || project.status === 'funded') {
+      // Track project statuses
+      if (project.status === 'active' || project.status === 'verified') {
         data.approvedProjects++;
-      }
-      
-      if (project.status === 'submitted' || project.status === 'under_review') {
+      } else if (project.status === 'funded') {
+        data.fundedProjects++;
+        data.approvedProjects++; // Funded projects are also approved
+      } else if (project.status === 'submitted' || project.status === 'under_review') {
         data.pendingProjects++;
       }
 
@@ -88,47 +150,101 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
       }
     });
 
-    // Calculate averages and rates
-    const result = Array.from(dataMap.values()).map(data => ({
-      ...data,
-      avgFunding: data.projects > 0 ? data.totalFunding / data.projects : 0,
-      approvalRate: data.projects > 0 
+    // Calculate averages, rates, and progress
+    const result = Array.from(dataMap.values()).map(data => {
+      const fundingProgress = data.totalFunding > 0 
+        ? (data.currentFunding / data.totalFunding) * 100 
+        : 0;
+      
+      const approvalRate = data.projects > 0 
         ? Math.round((data.approvedProjects / data.projects) * 100) 
-        : 0,
-      farmerCount: data.farmers.size,
-    }));
+        : 0;
 
-    // Sort by total projects (descending)
-    return result.sort((a, b) => b.projects - a.projects);
-  }, [projects]);
+      return {
+        ...data,
+        avgFunding: data.projects > 0 ? data.totalFunding / data.projects : 0,
+        approvalRate,
+        fundingProgress,
+        farmerCount: data.farmers.size,
+        contributors: regionalContributions.get(data.region) || 0,
+      };
+    });
+
+    // Sort by total funding (descending)
+    return result.sort((a, b) => b.totalFunding - a.totalFunding);
+  }, [projects, regionalContributions]);
 
   // Calculate totals
   const totals = useMemo(() => {
     return regionalData.reduce(
       (acc, data) => ({
         projects: acc.projects + data.projects,
-        funding: acc.funding + data.totalFunding,
+        totalFunding: acc.totalFunding + data.totalFunding,
+        currentFunding: acc.currentFunding + data.currentFunding,
         farmers: acc.farmers + data.farmerCount,
+        contributors: acc.contributors + data.contributors,
+        approvedProjects: acc.approvedProjects + data.approvedProjects,
+        fundedProjects: acc.fundedProjects + data.fundedProjects,
       }),
-      { projects: 0, funding: 0, farmers: 0 }
+      { 
+        projects: 0, 
+        totalFunding: 0, 
+        currentFunding: 0, 
+        farmers: 0, 
+        contributors: 0,
+        approvedProjects: 0,
+        fundedProjects: 0,
+      }
     );
   }, [regionalData]);
+
+  const handleRefresh = () => {
+    fetchRegionalContributionData();
+    if (onRefresh) {
+      onRefresh();
+    }
+    toast({
+      title: 'Refreshing regional data...',
+      status: 'info',
+      duration: 2000,
+    });
+  };
+
+  const formatMatic = (amount: number) => {
+    return `${amount.toFixed(2)} MATIC`;
+  };
 
   if (regionalData.length === 0) {
     return (
       <Card bg={cardBg} border="1px" borderColor={borderColor}>
         <CardHeader>
-          <HStack>
-            <Icon as={FiMapPin} color="purple.500" />
-            <Heading size="md" color="purple.600">
-              Regional Overview
-            </Heading>
+          <HStack justify="space-between">
+            <HStack>
+              <Icon as={FiMapPin} color="purple.500" />
+              <Heading size="md" color="purple.600">
+                Regional Overview
+              </Heading>
+            </HStack>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleRefresh}
+              isLoading={loading}
+            >
+              <FiRefreshCw />
+            </Button>
           </HStack>
         </CardHeader>
         <CardBody>
-          <Text color="gray.500" textAlign="center" py={8}>
-            No regional data available yet
-          </Text>
+          <VStack spacing={4} py={8}>
+            <Icon as={FiMapPin} boxSize={12} color="gray.400" />
+            <Text color="gray.500" textAlign="center">
+              No regional data available yet
+            </Text>
+            <Text fontSize="sm" color="gray.400" textAlign="center">
+              Projects will appear here once they are submitted with location data
+            </Text>
+          </VStack>
         </CardBody>
       </Card>
     );
@@ -144,29 +260,64 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
               Regional Overview
             </Heading>
           </HStack>
-          <Badge colorScheme="purple" fontSize="sm">
-            {regionalData.length} Regions
+          <HStack spacing={2}>
+            <Badge colorScheme="purple" fontSize="sm">
+              {regionalData.length} Regions
+            </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleRefresh}
+              isLoading={loading}
+            >
+              <FiRefreshCw />
+            </Button>
+          </HStack>
+        </HStack>
+
+        {/* Quick Stats */}
+        <HStack spacing={4} mt={3} fontSize="sm" flexWrap="wrap">
+          <Badge colorScheme="blue" variant="subtle">
+            📊 {totals.projects} Total Projects
+          </Badge>
+          <Badge colorScheme="green" variant="subtle">
+            👥 {totals.farmers} Farmers
+          </Badge>
+          <Badge colorScheme="orange" variant="subtle">
+            💰 {formatMatic(totals.totalFunding)} Goal
+          </Badge>
+          <Badge colorScheme="teal" variant="subtle">
+            🤝 {totals.contributors} Contributors
           </Badge>
         </HStack>
       </CardHeader>
+      
       <CardBody>
+        {loading && (
+          <Alert status="info" mb={4} size="sm">
+            <AlertIcon />
+            <Text fontSize="sm">Updating regional statistics...</Text>
+          </Alert>
+        )}
+
         <TableContainer>
           <Table variant="simple" size="sm">
             <Thead>
               <Tr>
                 <Th>Region</Th>
                 <Th isNumeric>Projects</Th>
-                <Th isNumeric>Total Funding</Th>
-                <Th isNumeric>Avg. Funding</Th>
+                <Th isNumeric>Funding Goal</Th>
+                <Th isNumeric>Raised</Th>
                 <Th isNumeric>Farmers</Th>
+                <Th isNumeric>Contributors</Th>
                 <Th>Approval Rate</Th>
                 <Th>Status</Th>
               </Tr>
             </Thead>
             <Tbody>
               {regionalData.map((data, index) => {
-                const fundingPercentage = totals.funding > 0 
-                  ? (data.totalFunding / totals.funding) * 100 
+                const fundingPercentage = totals.totalFunding > 0 
+                  ? (data.totalFunding / totals.totalFunding) * 100 
                   : 0;
 
                 return (
@@ -184,22 +335,39 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
                     </Td>
                     <Td isNumeric>
                       <Tooltip 
-                        label={`${fundingPercentage.toFixed(1)}% of total funding`}
+                        label={`${fundingPercentage.toFixed(1)}% of total platform funding`}
                         placement="top"
                       >
                         <Text fontWeight="medium" color="green.600">
-                          ${data.totalFunding.toLocaleString()}
+                          {formatMatic(data.totalFunding)}
                         </Text>
                       </Tooltip>
                     </Td>
                     <Td isNumeric>
-                      <Text fontSize="sm" color="gray.600">
-                        ${data.avgFunding.toLocaleString()}
-                      </Text>
+                      <Tooltip label={`${data.fundingProgress.toFixed(1)}% of regional goal`}>
+                        <Text fontSize="sm" color="blue.600" fontWeight="medium">
+                          {formatMatic(data.currentFunding)}
+                        </Text>
+                      </Tooltip>
+                      <Progress
+                        value={data.fundingProgress}
+                        size="xs"
+                        colorScheme={
+                          data.fundingProgress >= 80 ? 'green' :
+                          data.fundingProgress >= 40 ? 'orange' : 'red'
+                        }
+                        borderRadius="full"
+                        mt={1}
+                      />
                     </Td>
                     <Td isNumeric>
                       <Badge colorScheme="purple" variant="subtle">
                         {data.farmerCount}
+                      </Badge>
+                    </Td>
+                    <Td isNumeric>
+                      <Badge colorScheme="teal" variant="subtle">
+                        {data.contributors}
                       </Badge>
                     </Td>
                     <Td>
@@ -229,22 +397,29 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
                       </Tooltip>
                     </Td>
                     <Td>
-                      <HStack spacing={1}>
+                      <VStack spacing={1} align="start">
                         {data.approvedProjects > 0 && (
                           <Tooltip label={`${data.approvedProjects} approved`}>
-                            <Badge colorScheme="green" fontSize="xs">
-                              {data.approvedProjects}
+                            <Badge colorScheme="green" fontSize="2xs">
+                              ✅ {data.approvedProjects}
                             </Badge>
                           </Tooltip>
                         )}
                         {data.pendingProjects > 0 && (
                           <Tooltip label={`${data.pendingProjects} pending`}>
-                            <Badge colorScheme="orange" fontSize="xs">
-                              {data.pendingProjects}
+                            <Badge colorScheme="orange" fontSize="2xs">
+                              ⏳ {data.pendingProjects}
                             </Badge>
                           </Tooltip>
                         )}
-                      </HStack>
+                        {data.fundedProjects > 0 && (
+                          <Tooltip label={`${data.fundedProjects} fully funded`}>
+                            <Badge colorScheme="purple" fontSize="2xs">
+                              🎯 {data.fundedProjects}
+                            </Badge>
+                          </Tooltip>
+                        )}
+                      </VStack>
                     </Td>
                   </Tr>
                 );
@@ -264,19 +439,24 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
                   </Badge>
                 </Td>
                 <Td isNumeric color="green.600">
-                  ${totals.funding.toLocaleString()}
+                  {formatMatic(totals.totalFunding)}
                 </Td>
-                <Td isNumeric color="gray.600">
-                  ${(totals.funding / totals.projects).toLocaleString()}
+                <Td isNumeric color="blue.600">
+                  {formatMatic(totals.currentFunding)}
                 </Td>
                 <Td isNumeric>
                   <Badge colorScheme="purple">
                     {totals.farmers}
                   </Badge>
                 </Td>
+                <Td isNumeric>
+                  <Badge colorScheme="teal">
+                    {totals.contributors}
+                  </Badge>
+                </Td>
                 <Td colSpan={2}>
                   <Text fontSize="xs" color="gray.600">
-                    Across {regionalData.length} regions
+                    Platform Progress: {((totals.currentFunding / totals.totalFunding) * 100).toFixed(1)}%
                   </Text>
                 </Td>
               </Tr>
@@ -286,7 +466,7 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
 
         {/* Summary Stats */}
         <Box mt={4} p={3} bg={useColorModeValue('gray.50', 'gray.700')} borderRadius="md">
-          <HStack justify="space-around" fontSize="sm">
+          <HStack justify="space-around" fontSize="sm" flexWrap="wrap" spacing={4}>
             <Box textAlign="center">
               <Text color="gray.600" fontSize="xs">Top Region</Text>
               <Text fontWeight="bold" color="purple.600">
@@ -297,9 +477,15 @@ export default function RegionalOverview({ projects }: RegionalOverviewProps) {
               </Text>
             </Box>
             <Box textAlign="center">
-              <Text color="gray.600" fontSize="xs">Highest Funding</Text>
+              <Text color="gray.600" fontSize="xs">Highest Funding Goal</Text>
               <Text fontWeight="bold" color="green.600">
-                ${Math.max(...regionalData.map(d => d.totalFunding)).toLocaleString()}
+                {formatMatic(Math.max(...regionalData.map(d => d.totalFunding)))}
+              </Text>
+            </Box>
+            <Box textAlign="center">
+              <Text color="gray.600" fontSize="xs">Most Contributors</Text>
+              <Text fontWeight="bold" color="teal.600">
+                {Math.max(...regionalData.map(d => d.contributors))}
               </Text>
             </Box>
             <Box textAlign="center">

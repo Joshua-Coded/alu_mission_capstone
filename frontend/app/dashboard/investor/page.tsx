@@ -1,505 +1,616 @@
 "use client";
-import AvailableProjectsGrid from "@/components/dashboard/contributor/AvailableProjectsGrid";
-import ContributeModal from "@/components/dashboard/contributor/ContributeModal";
-import ContributorDashboardStats from "@/components/dashboard/contributor/ContributorDashboardStats";
-import MyContributionsTable from "@/components/dashboard/contributor/MyContributionsTable";
-import ProjectDetailsDrawer from "@/components/dashboard/contributor/ProjectDetailsDrawer";
+import ContributorSidebar from "@/components/dashboard/contributor/ContributorSidebar";
+import ProjectCard from "@/components/dashboard/farmer/ProjectCard";
 import RouteGuard from "@/components/RouteGuard";
+import TopHeader from "@/components/dashboard/contributor/TopHeader";
 import WalletConnectionGuard from "@/components/WalletConnectionGuard";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState } from "react";
+import WalletSync from "@/components/WalletSync";
+import contributionApi from "@/lib/contributionApi";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { FiDollarSign, FiHeart, FiRefreshCw, FiTrendingUp, FiUsers } from "react-icons/fi";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
-import { ApprovedProject, MyContribution, ProjectStatus } from "@/types/contributor.types";
+import { projectApi } from "@/lib/projectApi";
 
 import {
   Box,
   Container,
   Heading,
   VStack,
-  HStack,
   Button,
   Badge,
   Text,
   Flex,
-  Avatar,
   useColorModeValue,
-  useDisclosure,
+  SimpleGrid,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Card,
+  CardBody,
+  Icon,
+  Progress,
   useToast,
+  Spinner,
+  HStack,
+  Link,
 } from '@chakra-ui/react';
 
-// Mock data with proper types
-const mockProjects: ApprovedProject[] = [
-  {
-    id: '1',
-    projectName: 'Organic Coffee Plantation',
-    farmerName: 'Maria Santos',
-    farmerEmail: 'maria@example.com',
-    farmerId: 'KE-2024-001',
-    location: 'Kiambu',
-    district: 'Kiambu County',
-    projectType: 'Coffee Production',
-    description: 'Sustainable coffee production with organic farming methods, focusing on shade-grown arabica coffee that preserves local biodiversity while producing premium beans for export markets.',
-    fundingGoal: 50000,
-    currentFunding: 35000,
-    fundingProgress: 70,
-    totalContributors: 45,
-    minimumContribution: 500,
-    duration: 18,
-    expectedYield: '5 tons per harvest',
-    sustainabilityScore: 85,
-    expectedImpact: 'Creating 20 jobs and supporting 50 families',
-    beneficiaries: 50,
-    jobsCreated: 20,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-15'),
-    governmentComments: 'Excellent sustainability practices',
-    images: [
-      'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=800&q=80',
-      'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800&q=80',
-      'https://images.unsplash.com/photo-1587734195503-904ecd4bd6b1?w=800&q=80'
-    ],
-    videos: ['https://www.youtube.com/embed/HF1H9YOkGpw'],
-    documents: [
-      { id: '1', name: 'Project Proposal.pdf', type: 'BUSINESS_PLAN', url: '/docs/1.pdf', size: '2.5 MB', verified: true },
-      { id: '2', name: 'Environmental Impact.pdf', type: 'TECHNICAL', url: '/docs/2.pdf', size: '1.8 MB', verified: true },
-      { id: '3', name: 'Land Certificate.pdf', type: 'LAND_CERTIFICATE', url: '/docs/3.pdf', size: '1.2 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-12-01'),
-    fundingDeadline: new Date('2025-06-01'),
-  },
-  {
-    id: '2',
-    projectName: 'Hydroponic Vegetable Farm',
-    farmerName: 'James Ochieng',
-    farmerEmail: 'james@example.com',
-    farmerId: 'KE-2024-002',
-    location: 'Nakuru',
-    district: 'Nakuru County',
-    projectType: 'Vegetable Production',
-    description: 'Modern hydroponic system for year-round vegetable production using vertical farming techniques and renewable energy to maximize yield while minimizing water usage.',
-    fundingGoal: 35000,
-    currentFunding: 8000,
-    fundingProgress: 23,
-    totalContributors: 18,
-    minimumContribution: 300,
-    duration: 12,
-    expectedYield: '3 tons per month',
-    sustainabilityScore: 92,
-    expectedImpact: 'Providing fresh vegetables to 200 households',
-    beneficiaries: 200,
-    jobsCreated: 15,
-    status: ProjectStatus.APPROVED_FOR_FUNDING,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-20'),
-    governmentComments: 'Innovative approach to urban farming',
-    images: [
-      'https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=800&q=80',
-      'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=800&q=80'
-    ],
-    videos: ['https://www.youtube.com/embed/7HoTV_FL7wo'],
-    documents: [
-      { id: '1', name: 'Business Plan.pdf', type: 'BUSINESS_PLAN', url: '/docs/3.pdf', size: '3.2 MB', verified: true },
-      { id: '2', name: 'Technical Specifications.pdf', type: 'TECHNICAL', url: '/docs/4.pdf', size: '2.1 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-12-10'),
-    fundingDeadline: new Date('2025-05-01'),
-  },
-  {
-    id: '3',
-    projectName: 'Dairy Farming Expansion',
-    farmerName: 'Peter Kimani',
-    farmerEmail: 'peter@example.com',
-    farmerId: 'KE-2024-003',
-    location: 'Meru',
-    district: 'Meru County',
-    projectType: 'Dairy Production',
-    description: 'Expanding dairy production with modern milking equipment and improved cattle breeds to increase milk production and quality for local distribution.',
-    fundingGoal: 75000,
-    currentFunding: 60000,
-    fundingProgress: 80,
-    totalContributors: 62,
-    minimumContribution: 1000,
-    duration: 24,
-    expectedYield: '500 liters per day',
-    sustainabilityScore: 78,
-    expectedImpact: 'Supplying milk to local schools and hospitals',
-    beneficiaries: 150,
-    jobsCreated: 12,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-01'),
-    governmentComments: 'Strong community impact',
-    images: [
-      'https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=800&q=80',
-      'https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=800&q=80'
-    ],
-    videos: [],
-    documents: [
-      { id: '1', name: 'Financial Projections.pdf', type: 'FINANCIAL', url: '/docs/4.pdf', size: '1.5 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-11-20'),
-    fundingDeadline: new Date('2025-04-01'),
-  },
-  {
-    id: '4',
-    projectName: 'Avocado Orchard Development',
-    farmerName: 'Grace Wanjiku',
-    farmerEmail: 'grace@example.com',
-    farmerId: 'KE-2024-004',
-    location: 'Murang\'a',
-    district: 'Murang\'a County',
-    projectType: 'Fruit Production',
-    description: 'Establishing a 10-acre avocado orchard with Hass variety trees, drip irrigation system, and organic pest management for premium export market.',
-    fundingGoal: 45000,
-    currentFunding: 12000,
-    fundingProgress: 27,
-    totalContributors: 28,
-    minimumContribution: 400,
-    duration: 36,
-    expectedYield: '15 tons per season',
-    sustainabilityScore: 88,
-    expectedImpact: 'Creating employment for 25 people and boosting local economy',
-    beneficiaries: 80,
-    jobsCreated: 25,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-18'),
-    governmentComments: 'High export potential, excellent water management',
-    images: [
-      'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?w=800&q=80',
-      'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=800&q=80'
-    ],
-    videos: [],
-    documents: [
-      { id: '1', name: 'Orchard Plan.pdf', type: 'BUSINESS_PLAN', url: '/docs/5.pdf', size: '2.8 MB', verified: true },
-      { id: '2', name: 'Soil Analysis Report.pdf', type: 'TECHNICAL', url: '/docs/6.pdf', size: '1.4 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-12-05'),
-    fundingDeadline: new Date('2025-04-15'),
-  },
-  {
-    id: '5',
-    projectName: 'Poultry Farm Modernization',
-    farmerName: 'Samuel Otieno',
-    farmerEmail: 'samuel@example.com',
-    farmerId: 'KE-2024-005',
-    location: 'Kisumu',
-    district: 'Kisumu County',
-    projectType: 'Poultry Production',
-    description: 'Upgrading poultry infrastructure with automated feeding systems, climate control, and biosecurity measures to increase egg production capacity.',
-    fundingGoal: 38000,
-    currentFunding: 5000,
-    fundingProgress: 13,
-    totalContributors: 12,
-    minimumContribution: 250,
-    duration: 15,
-    expectedYield: '20,000 eggs per week',
-    sustainabilityScore: 75,
-    expectedImpact: 'Providing affordable protein source to 300 families',
-    beneficiaries: 300,
-    jobsCreated: 18,
-    status: ProjectStatus.APPROVED_FOR_FUNDING,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-22'),
-    governmentComments: 'Strong demand in local market',
-    images: [
-      'https://images.unsplash.com/photo-1548550023-2bdb3c5beed7?w=800&q=80',
-      'https://images.unsplash.com/photo-1612170153139-6f881ff067e0?w=800&q=80'
-    ],
-    videos: ['https://www.youtube.com/embed/Z7SRk34xdrQ'],
-    documents: [
-      { id: '1', name: 'Modernization Plan.pdf', type: 'BUSINESS_PLAN', url: '/docs/7.pdf', size: '2.2 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-12-12'),
-    fundingDeadline: new Date('2025-05-20'),
-  },
-  {
-    id: '6',
-    projectName: 'Beekeeping & Honey Production',
-    farmerName: 'Lucy Nyambura',
-    farmerEmail: 'lucy@example.com',
-    farmerId: 'KE-2024-006',
-    location: 'Embu',
-    district: 'Embu County',
-    projectType: 'Apiculture',
-    description: 'Establishing 100 modern beehives for organic honey production with value addition through processing and packaging for premium markets.',
-    fundingGoal: 28000,
-    currentFunding: 22000,
-    fundingProgress: 79,
-    totalContributors: 38,
-    minimumContribution: 200,
-    duration: 10,
-    expectedYield: '2 tons of honey annually',
-    sustainabilityScore: 95,
-    expectedImpact: 'Supporting biodiversity and creating sustainable income',
-    beneficiaries: 40,
-    jobsCreated: 8,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-08'),
-    governmentComments: 'Excellent environmental benefits',
-    images: [
-      'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=800&q=80',
-      'https://images.unsplash.com/photo-1587049352846-4a222e784fbf?w=800&q=80'
-    ],
-    videos: [],
-    documents: [
-      { id: '1', name: 'Beekeeping Plan.pdf', type: 'BUSINESS_PLAN', url: '/docs/8.pdf', size: '1.9 MB', verified: true },
-      { id: '2', name: 'Environmental Impact.pdf', type: 'TECHNICAL', url: '/docs/9.pdf', size: '1.3 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-11-25'),
-    fundingDeadline: new Date('2025-03-30'),
-  },
-  {
-    id: '7',
-    projectName: 'Greenhouse Tomato Production',
-    farmerName: 'John Kariuki',
-    farmerEmail: 'john@example.com',
-    farmerId: 'KE-2024-007',
-    location: 'Kajiado',
-    district: 'Kajiado County',
-    projectType: 'Vegetable Production',
-    description: 'Climate-controlled greenhouse for year-round tomato production using soilless cultivation and integrated pest management.',
-    fundingGoal: 52000,
-    currentFunding: 15000,
-    fundingProgress: 29,
-    totalContributors: 22,
-    minimumContribution: 600,
-    duration: 14,
-    expectedYield: '5 tons per month',
-    sustainabilityScore: 86,
-    expectedImpact: 'Supplying fresh tomatoes to local markets year-round',
-    beneficiaries: 120,
-    jobsCreated: 16,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-12-12'),
-    governmentComments: 'Good market access and infrastructure',
-    images: [
-      'https://images.unsplash.com/photo-1592921870789-04563d55041c?w=800&q=80',
-      'https://images.unsplash.com/photo-1597645587822-e99fa5d45d25?w=800&q=80'
-    ],
-    videos: ['https://www.youtube.com/embed/pPvPB8qJqkI'],
-    documents: [
-      { id: '1', name: 'Greenhouse Design.pdf', type: 'TECHNICAL', url: '/docs/10.pdf', size: '3.5 MB', verified: true },
-      { id: '2', name: 'Financial Plan.pdf', type: 'FINANCIAL', url: '/docs/11.pdf', size: '1.7 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-12-02'),
-    fundingDeadline: new Date('2025-04-30'),
-  },
-  {
-    id: '8',
-    projectName: 'Tea Farming Cooperative',
-    farmerName: 'Margaret Chebet',
-    farmerEmail: 'margaret@example.com',
-    farmerId: 'KE-2024-008',
-    location: 'Kericho',
-    district: 'Kericho County',
-    projectType: 'Tea Production',
-    description: 'Expanding smallholder tea cooperative with processing equipment and farmer training programs to improve quality and increase income.',
-    fundingGoal: 68000,
-    currentFunding: 42000,
-    fundingProgress: 62,
-    totalContributors: 56,
-    minimumContribution: 800,
-    duration: 20,
-    expectedYield: '12 tons per harvest',
-    sustainabilityScore: 82,
-    expectedImpact: 'Benefiting 45 smallholder farmers and their families',
-    beneficiaries: 180,
-    jobsCreated: 22,
-    status: ProjectStatus.FUNDING_IN_PROGRESS,
-    verificationStatus: 'VERIFIED',
-    approvedBy: 'Ministry of Agriculture',
-    approvedAt: new Date('2024-11-28'),
-    governmentComments: 'Strong cooperative structure and community support',
-    images: [
-      'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?w=800&q=80',
-      'https://images.unsplash.com/photo-1563514189-0c3ece8b9cff?w=800&q=80'
-    ],
-    videos: [],
-    documents: [
-      { id: '1', name: 'Cooperative Agreement.pdf', type: 'OTHER', url: '/docs/12.pdf', size: '2.0 MB', verified: true },
-      { id: '2', name: 'Processing Plan.pdf', type: 'TECHNICAL', url: '/docs/13.pdf', size: '2.4 MB', verified: true },
-    ],
-    contributors: [],
-    createdAt: new Date('2024-11-18'),
-    fundingDeadline: new Date('2025-05-15'),
-  },
-];
+interface DashboardStats {
+  totalContributions: number;
+  totalAmountMatic: number;
+  projectsSupported: number;
+  activeProjects: number;
+  confirmedContributions: number;
+  pendingContributions: number;
+  averageContribution: number;
+}
 
-const mockContributions: MyContribution[] = [
-  {
-    id: '1',
-    projectId: '1',
-    projectName: 'Organic Coffee Plantation',
-    farmerName: 'Maria Santos',
-    amount: 2000,
-    contributedAt: new Date('2024-12-10T10:30:00Z'),
-    projectStatus: ProjectStatus.FUNDING_IN_PROGRESS,
-    impactSoFar: '70% funded, helping create 20 jobs',
-    transactionHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-  },
-  {
-    id: '2',
-    projectId: '2',
-    projectName: 'Hydroponic Vegetable Farm',
-    farmerName: 'James Ochieng',
-    amount: 1500,
-    contributedAt: new Date('2024-12-15T14:20:00Z'),
-    projectStatus: ProjectStatus.APPROVED_FOR_FUNDING,
-    impactSoFar: 'Early stage - helping with setup',
-    transactionHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-  },
-];
-
-export default function ContributorDashboard() {
+export default function InvestorDashboard() {
   const { user, logout } = useAuth();
   const { address } = useAccount();
+  const router = useRouter();
+  const toast = useToast();
+  
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
-  const toast = useToast();
 
-  const [selectedProject, setSelectedProject] = useState<ApprovedProject | null>(null);
-  const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
-  const { isOpen: isContributeOpen, onOpen: onContributeOpen, onClose: onContributeClose } = useDisclosure();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalContributions: 0,
+    totalAmountMatic: 0,
+    projectsSupported: 0,
+    activeProjects: 0,
+    confirmedContributions: 0,
+    pendingContributions: 0,
+    averageContribution: 0,
+  });
+  
 
-  const handleViewProject = (projectId: string) => {
-    const project = mockProjects.find(p => p.id === projectId);
-    if (project) {
-      setSelectedProject(project);
-      onDetailsOpen();
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [recentContributions, setRecentContributions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Fetching dashboard data...');
+      
+      // Fetch contribution stats
+      try {
+        const statsResult = await contributionApi.getMyStats();
+        console.log('📊 Stats Result:', statsResult);
+        
+        if (statsResult.success && statsResult.data) {
+          const data = statsResult.data;
+          setStats({
+            totalContributions: data.totalContributions || 0,
+            totalAmountMatic: data.totalAmountMatic || 0,
+            projectsSupported: data.projectsSupported || 0,
+            activeProjects: 0,
+            confirmedContributions: data.confirmedContributions || 0,
+            pendingContributions: data.pendingContributions || 0,
+            averageContribution: data.averageContribution || 0, 
+          });
+          console.log('✅ Stats set:', {
+            totalAmountMatic: data.totalAmountMatic,
+            totalContributions: data.totalContributions,
+            projectsSupported: data.projectsSupported
+          });
+        } else {
+          console.log('❌ No stats data in response');
+        }
+      } catch (err: any) {
+        console.log('❌ Stats API error:', err.message);
+      }
+
+      // If stats are still 0, try fetching contributions directly
+      if (stats.totalAmountMatic === 0) {
+        await fetchContributionsDirectly();
+      }
+
+      // Fetch recent contributions
+      try {
+        const contributionsResult = await contributionApi.getMyContributions(1, 5);
+        console.log('📝 Contributions Result:', contributionsResult);
+        
+        if (contributionsResult.success && contributionsResult.data) {
+          const contributions = contributionsResult.data.contributions || [];
+          setRecentContributions(contributions);
+          
+          // If we still don't have stats, calculate from contributions
+          if (stats.totalAmountMatic === 0 && contributions.length > 0) {
+            const totalMatic = contributions.reduce((sum: number, contribution: any) => {
+              return sum + (contribution.amountMatic || contribution.amount || 0);
+            }, 0);
+            
+            const uniqueProjects = new Set(contributions.map((c: any) => c.project?._id)).size;
+            
+            console.log('💰 Calculated from contributions:', {
+              totalMatic,
+              totalContributions: contributions.length,
+              uniqueProjects
+            });
+            
+            setStats(prev => ({
+              ...prev,
+              totalAmountMatic: totalMatic,
+              totalContributions: contributions.length,
+              projectsSupported: uniqueProjects,
+            }));
+          }
+        }
+      } catch (err: any) {
+        console.log('❌ Could not fetch recent contributions:', err.message);
+      }
+      
+      // Fetch projects
+      try {
+        const projects = await projectApi.getVerifiedProjects();
+        const activeProjects = projects.filter((p: any) => p.status === 'active');
+        
+        setStats(prev => ({
+          ...prev,
+          activeProjects: activeProjects.length,
+        }));
+        
+        setRecentProjects(activeProjects.slice(0, 6));
+      } catch (err: any) {
+        console.log('❌ Could not fetch projects:', err.message);
+        setRecentProjects([]);
+      }
+    } catch (err: any) {
+      console.error('❌ Error loading dashboard:', err);
+      toast({
+        title: 'Error Loading Dashboard',
+        description: 'Some data could not be loaded. Please try again later.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const handleContribute = (projectId: string) => {
-    const project = mockProjects.find(p => p.id === projectId);
-    if (project) {
-      setSelectedProject(project);
-      onContributeOpen();
+  const fetchContributionsDirectly = async () => {
+    try {
+      console.log('🔄 Trying alternative: Loading all contributions...');
+      const contributionsResult = await contributionApi.getMyContributions(1, 100);
+      
+      console.log('📊 All Contributions Response:', contributionsResult);
+      
+      if (contributionsResult.success && contributionsResult.data) {
+        const contributions = contributionsResult.data.contributions || [];
+        const totalMatic = contributions.reduce((sum: number, contribution: any) => {
+          return sum + (contribution.amountMatic || contribution.amount || 0);
+        }, 0);
+        
+        const uniqueProjects = new Set(contributions.map((c: any) => c.project?._id)).size;
+        const confirmedContributions = contributions.filter((c: any) => c.status === 'confirmed').length;
+        const pendingContributions = contributions.filter((c: any) => c.status === 'pending').length;
+        
+        console.log('💰 Calculated totals:', {
+          totalMatic,
+          totalContributions: contributions.length,
+          uniqueProjects,
+          confirmedContributions,
+          pendingContributions
+        });
+        
+        if (totalMatic > 0) {
+          setStats(prev => ({
+            ...prev,
+            totalAmountMatic: totalMatic,
+            totalContributions: contributions.length,
+            projectsSupported: uniqueProjects,
+            confirmedContributions,
+            pendingContributions,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('❌ Alternative approach failed:', error);
     }
   };
 
-  const handleContributeFromDetails = () => {
-    onDetailsClose();
-    onContributeOpen();
-  };
-
-  const handleContributeConfirm = async (amount: number) => {
-    // Simulate blockchain transaction
-    console.log('Contributing:', amount, 'to project:', selectedProject?.id);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
     toast({
-      title: 'Contribution Successful!',
-      description: `You contributed $${amount} to ${selectedProject?.projectName}`,
+      title: 'Dashboard Refreshed',
       status: 'success',
-      duration: 5000,
+      duration: 2000,
       isClosable: true,
     });
   };
 
+  const formatMatic = (amount: number | undefined) => {
+    if (amount === undefined || amount === null || isNaN(amount)) {
+      return '0.0000';
+    }
+    if (amount === 0) return '0.0000';
+    if (amount < 0.0001) return '< 0.0001';
+    return amount.toFixed(4);
+  };
+
+  const formatCompactNumber = (num: number) => {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+  };
+
+  const handleViewProject = (project: any) => {
+    router.push(`/projects/${project._id}`);
+  };
+
+  const getProgressPercentage = () => {
+    if (stats.totalContributions === 0) return 0;
+    const total = stats.confirmedContributions + stats.pendingContributions;
+    if (total === 0) return 0;
+    return (stats.confirmedContributions / total) * 100;
+  };
+
   return (
-    <RouteGuard allowedRoles={['FARMER', 'INVESTOR', 'GOVERNMENT_OFFICIAL']}>
+    <RouteGuard allowedRoles={['INVESTOR']}>
       <WalletConnectionGuard 
-        title="Connect Wallet to Contributor Dashboard"
-        description="Connect your wallet to contribute to agricultural projects and support farmers with blockchain-secured funding."
+        title="Connect Wallet to Investor Dashboard"
+        description="Connect your wallet to invest in agricultural projects and support farmers with blockchain-secured funding."
       >
-        <Box minH="100vh" bg="gray.50">
-          {/* Header */}
-          <Box bg={cardBg} borderBottom="1px" borderColor={borderColor} py={4}>
-            <Container maxW="7xl">
-              <Flex justify="space-between" align="center">
-                <HStack spacing={4}>
-                  <Avatar size="md" name={`${user?.firstName} ${user?.lastName}`} bg="green.500" />
-                  <VStack align="start" spacing={0}>
-                    <Heading size="md" color="green.600">
-                      Welcome back, {user?.firstName}!
-                    </Heading>
-                    <Text fontSize="sm" color="gray.500">
-                      Contributor Dashboard • {new Date().toLocaleDateString()}
-                    </Text>
-                  </VStack>
-                </HStack>
-                <HStack spacing={3}>
-                  <Badge colorScheme="green" px={3} py={1} borderRadius="full">
-                    Verified Contributor
-                  </Badge>
-                  {address && (
-                    <Text fontSize="xs" color="gray.500" fontFamily="mono">
-                      {`${address.slice(0, 6)}...${address.slice(-4)}`}
-                    </Text>
+        <WalletSync />
+        
+        <Box minH="100vh" bg={bgColor}>
+          <ContributorSidebar 
+            isCollapsed={sidebarCollapsed}
+            user={user}
+          />
+          
+          <TopHeader
+            user={user}
+            onLogout={logout}
+            onToggleSidebar={toggleSidebar}
+            sidebarCollapsed={sidebarCollapsed}
+          />
+          
+          <Box 
+            ml={sidebarCollapsed ? '70px' : '280px'}
+            transition="margin-left 0.3s ease"
+            pt="80px"
+            pb={8}
+            px={6}
+            minH="100vh"
+            w={`calc(100% - ${sidebarCollapsed ? '70px' : '280px'})`}
+          >
+            <Container maxW="7xl" p={0}>
+              {loading ? (
+                <VStack spacing={4} py={20}>
+                  <Spinner size="xl" color="blue.500" thickness="4px" />
+                  <Text color="gray.600">Loading investor dashboard...</Text>
+                </VStack>
+              ) : (
+                <VStack spacing={8} align="stretch">
+                  {/* Welcome Header with Refresh */}
+                  <Flex justify="space-between" align="center">
+                    <Box>
+                      <Heading size="lg" mb={2}>Welcome back, {user?.firstName}! 👋</Heading>
+                      <Text color="gray.600">Here's an overview of your investment portfolio</Text>
+                    </Box>
+                    <Button
+                      leftIcon={<Icon as={FiRefreshCw} />}
+                      variant="outline"
+                      onClick={handleRefresh}
+                      isLoading={refreshing}
+                      size="sm"
+                    >
+                      Refresh
+                    </Button>
+                  </Flex>
+
+                  {/* Stats Grid */}
+                  <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6}>
+                    <Card bg={cardBg} shadow="sm" borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Stat>
+                          <Flex justify="space-between" align="start">
+                            <VStack align="start" spacing={2}>
+                              <StatLabel color="gray.600" fontSize="sm">Total Investments</StatLabel>
+                              <StatNumber fontSize="2xl" fontWeight="bold" color="blue.600">
+                                {formatCompactNumber(stats.totalContributions)}
+                              </StatNumber>
+                              <Text fontSize="xs" color="gray.500">
+                                {stats.confirmedContributions} confirmed
+                              </Text>
+                            </VStack>
+                            <Icon as={FiDollarSign} boxSize={6} color="blue.500" bg="blue.100" p={2} borderRadius="md" />
+                          </Flex>
+                        </Stat>
+                      </CardBody>
+                    </Card>
+
+                    <Card bg={cardBg} shadow="sm" borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Stat>
+                          <Flex justify="space-between" align="start">
+                            <VStack align="start" spacing={2}>
+                              <StatLabel color="gray.600" fontSize="sm">Total Invested</StatLabel>
+                              <HStack spacing={1}>
+                                <StatNumber fontSize="2xl" fontWeight="bold" color="purple.600">
+                                  {formatMatic(stats.totalAmountMatic)}
+                                </StatNumber>
+                                <Text fontSize="lg" color="purple.500" fontWeight="bold">MATIC</Text>
+                              </HStack>
+                              {stats.averageContribution > 0 && (
+                                <Text fontSize="xs" color="gray.500">
+                                  Avg: {formatMatic(stats.averageContribution)}
+                                </Text>
+                              )}
+                            </VStack>
+                            <Icon as={FiTrendingUp} boxSize={6} color="green.500" bg="green.100" p={2} borderRadius="md" />
+                          </Flex>
+                        </Stat>
+                      </CardBody>
+                    </Card>
+
+                    <Card bg={cardBg} shadow="sm" borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Stat>
+                          <Flex justify="space-between" align="start">
+                            <VStack align="start" spacing={2}>
+                              <StatLabel color="gray.600" fontSize="sm">Projects Funded</StatLabel>
+                              <StatNumber fontSize="2xl" fontWeight="bold" color="purple.600">
+                                {formatCompactNumber(stats.projectsSupported)}
+                              </StatNumber>
+                              <Text fontSize="xs" color="gray.500">
+                                Active investments
+                              </Text>
+                            </VStack>
+                            <Icon as={FiUsers} boxSize={6} color="purple.500" bg="purple.100" p={2} borderRadius="md" />
+                          </Flex>
+                        </Stat>
+                      </CardBody>
+                    </Card>
+
+                    <Card bg={cardBg} shadow="sm" borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Stat>
+                          <Flex justify="space-between" align="start">
+                            <VStack align="start" spacing={2}>
+                              <StatLabel color="gray.600" fontSize="sm">Active Opportunities</StatLabel>
+                              <StatNumber fontSize="2xl" fontWeight="bold" color="orange.600">
+                                {stats.activeProjects}
+                              </StatNumber>
+                              <Text fontSize="xs" color="gray.500">
+                                Available to invest
+                              </Text>
+                            </VStack>
+                            <Icon as={FiHeart} boxSize={6} color="orange.500" bg="orange.100" p={2} borderRadius="md" />
+                          </Flex>
+                        </Stat>
+                      </CardBody>
+                    </Card>
+                  </SimpleGrid>
+
+                  {/* Transaction Status */}
+                  {stats.pendingContributions > 0 && (
+                    <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <VStack spacing={3} align="stretch">
+                          <Flex justify="space-between" align="center">
+                            <Text fontWeight="medium" color="gray.700">
+                              Transaction Status
+                            </Text>
+                            <Badge colorScheme="yellow" fontSize="xs">
+                              {stats.pendingContributions} pending
+                            </Badge>
+                          </Flex>
+                          <Progress 
+                            value={getProgressPercentage()} 
+                            size="lg" 
+                            colorScheme="green" 
+                            borderRadius="full"
+                            hasStripe
+                            isAnimated
+                          />
+                          <Flex justify="space-between" fontSize="sm" color="gray.600">
+                            <Text>
+                              {stats.confirmedContributions} confirmed
+                            </Text>
+                            <Text>
+                              {Math.round(getProgressPercentage())}% complete
+                            </Text>
+                          </Flex>
+                        </VStack>
+                      </CardBody>
+                    </Card>
                   )}
-                  <ConnectButton />
-                  <Button colorScheme="green" variant="outline" size="sm" onClick={logout}>
-                    Logout
-                  </Button>
-                </HStack>
-              </Flex>
+
+                  {/* Quick Actions */}
+                  <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+                    <Card 
+                      bg="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
+                      color="white"
+                      cursor="pointer"
+                      onClick={() => router.push('/projects/active')}
+                      _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+                      transition="all 0.2s"
+                    >
+                      <CardBody>
+                        <Flex justify="space-between" align="center">
+                          <VStack align="start" spacing={1}>
+                            <Heading size="md">Browse Projects</Heading>
+                            <Text fontSize="sm" opacity={0.9}>Find investment opportunities</Text>
+                          </VStack>
+                          <Text fontSize="3xl">→</Text>
+                        </Flex>
+                      </CardBody>
+                    </Card>
+
+                    <Card 
+                      bg="linear-gradient(135deg, #22c55e 0%, #16a34a 100%)"
+                      color="white"
+                      cursor="pointer"
+                      onClick={() => router.push('/contributions/history')}
+                      _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+                      transition="all 0.2s"
+                    >
+                      <CardBody>
+                        <Flex justify="space-between" align="center">
+                          <VStack align="start" spacing={1}>
+                            <Heading size="md">My Portfolio</Heading>
+                            <Text fontSize="sm" opacity={0.9}>View investment history</Text>
+                          </VStack>
+                          <Text fontSize="3xl">→</Text>
+                        </Flex>
+                      </CardBody>
+                    </Card>
+
+                    <Card 
+                      bg="linear-gradient(135deg, #a855f7 0%, #9333ea 100%)"
+                      color="white"
+                      cursor="pointer"
+                      onClick={() => router.push('/projects/favorites')}
+                      _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
+                      transition="all 0.2s"
+                    >
+                      <CardBody>
+                        <Flex justify="space-between" align="center">
+                          <VStack align="start" spacing={1}>
+                            <Heading size="md">Watchlist</Heading>
+                            <Text fontSize="sm" opacity={0.9}>Track favorite projects</Text>
+                          </VStack>
+                          <Text fontSize="3xl">→</Text>
+                        </Flex>
+                      </CardBody>
+                    </Card>
+                  </SimpleGrid>
+
+                  {/* Recent Investments */}
+                  {recentContributions.length > 0 && (
+                    <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Flex justify="space-between" align="center" mb={6}>
+                          <VStack align="start" spacing={1}>
+                            <Heading size="md">Recent Investments</Heading>
+                            <Text fontSize="sm" color="gray.600">
+                              Total: {formatMatic(stats.totalAmountMatic)} MATIC
+                            </Text>
+                          </VStack>
+                          <Button 
+                            variant="link" 
+                            colorScheme="blue" 
+                            size="sm"
+                            onClick={() => router.push('/contributions/history')}
+                          >
+                            View All →
+                          </Button>
+                        </Flex>
+
+                        <VStack spacing={4} align="stretch">
+                          {recentContributions.map((contribution) => (
+                            <Flex
+                              key={contribution._id}
+                              justify="space-between"
+                              align="center"
+                              p={4}
+                              bg={useColorModeValue('gray.50', 'gray.700')}
+                              borderRadius="lg"
+                              _hover={{ bg: useColorModeValue('gray.100', 'gray.600') }}
+                              transition="all 0.2s"
+                              cursor="pointer"
+                              onClick={() => router.push(`/projects/${contribution.project._id}`)}
+                            >
+                              <VStack align="start" spacing={1}>
+                                <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                                  {contribution.project?.title || 'Unknown Project'}
+                                </Text>
+                                <HStack spacing={2}>
+                                  <Text fontWeight="bold" color="purple.600">
+                                    {formatMatic(contribution.amountMatic || contribution.amount)}
+                                  </Text>
+                                  <Text fontSize="sm" color="purple.500" fontWeight="bold">MATIC</Text>
+                                </HStack>
+                                <Text fontSize="xs" color="gray.500">
+                                  {new Date(contribution.contributedAt || contribution.createdAt).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                  })}
+                                </Text>
+                              </VStack>
+                              <Badge
+                                colorScheme={
+                                  contribution.status === 'confirmed' ? 'green' :
+                                  contribution.status === 'pending' ? 'yellow' : 'red'
+                                }
+                                px={3}
+                                py={1}
+                                borderRadius="full"
+                                textTransform="capitalize"
+                                fontSize="xs"
+                              >
+                                {contribution.status}
+                              </Badge>
+                            </Flex>
+                          ))}
+                        </VStack>
+                      </CardBody>
+                    </Card>
+                  )}
+
+                  {/* Investment Opportunities */}
+                  <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+                    <CardBody>
+                      <Flex justify="space-between" align="center" mb={6}>
+                        <Heading size="md">Investment Opportunities</Heading>
+                        <Button 
+                          variant="link" 
+                          colorScheme="blue" 
+                          size="sm"
+                          onClick={() => router.push('/projects/active')}
+                        >
+                          View All →
+                        </Button>
+                      </Flex>
+
+                      {recentProjects.length > 0 ? (
+                        <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+                          {recentProjects.map((project) => (
+                            <ProjectCard
+                              key={project._id}
+                              project={project}
+                              onViewDetails={handleViewProject}
+                              showBlockchainInfo={true}
+                            />
+                          ))}
+                        </SimpleGrid>
+                      ) : (
+                        <VStack spacing={4} py={12}>
+                          <Icon as={FiUsers} boxSize={12} color="gray.400" />
+                          <Text color="gray.600">No projects available</Text>
+                          <Text fontSize="sm" color="gray.500" textAlign="center">
+                            Check back later for new investment opportunities
+                          </Text>
+                        </VStack>
+                      )}
+                    </CardBody>
+                  </Card>
+                </VStack>
+              )}
             </Container>
           </Box>
-
-          <Container maxW="7xl" py={8}>
-            <VStack spacing={8} align="stretch">
-              {/* Dashboard Stats */}
-              <ContributorDashboardStats
-                totalContributed={3500}
-                activeProjects={2}
-                completedProjects={0}
-                livesImpacted={250}
-              />
-
-              {/* Available Projects Grid */}
-              <AvailableProjectsGrid
-                projects={mockProjects}
-                onViewProject={handleViewProject}
-                onContribute={handleContribute}
-              />
-
-              {/* My Contributions Table */}
-              <MyContributionsTable
-                contributions={mockContributions}
-                onViewProject={handleViewProject}
-              />
-            </VStack>
-          </Container>
-
-          {/* Project Details Drawer */}
-          <ProjectDetailsDrawer
-            isOpen={isDetailsOpen}
-            onClose={onDetailsClose}
-            project={selectedProject}
-            onContribute={handleContributeFromDetails}
-          />
-
-          {/* Contribute Modal */}
-          {selectedProject && (
-            <ContributeModal
-              isOpen={isContributeOpen}
-              onClose={onContributeClose}
-              projectName={selectedProject.projectName}
-              minimumContribution={selectedProject.minimumContribution}
-              fundingGoal={selectedProject.fundingGoal}
-              currentFunding={selectedProject.currentFunding}
-              onContributeConfirm={handleContributeConfirm}
-            />
-          )}
         </Box>
       </WalletConnectionGuard>
     </RouteGuard>

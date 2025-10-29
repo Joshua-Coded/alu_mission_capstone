@@ -161,6 +161,13 @@ export interface ResendVerificationData {
   email: string;
 }
 
+export interface WalletUpdateResponse {
+  success: boolean;
+  message: string;
+  walletAddress: string;
+  user?: any;
+}
+
 class ApiService {
   async register(data: RegisterData): Promise<AuthResponse> {
     // Remove confirmPassword before sending to backend
@@ -198,15 +205,16 @@ class ApiService {
     return response.data;
   }
 
-  async syncWallet(walletAddress: string): Promise<{ 
-    success: boolean; 
-    message: string; 
-    walletAddress: string 
-  }> {
-    const response = await apiClient.post('/auth/update-wallet', { 
+  async syncWallet(walletAddress: string): Promise<WalletUpdateResponse> {
+    const response = await apiClient.patch<WalletUpdateResponse>('/auth/update-wallet', { 
       walletAddress 
     });
     return response.data;
+  }
+
+  // Alias for syncWallet - same functionality
+  async updateWalletAddress(walletAddress: string): Promise<WalletUpdateResponse> {
+    return this.syncWallet(walletAddress);
   }
 
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
@@ -267,3 +275,6 @@ class ApiService {
 }
 
 export const api = new ApiService();
+
+// Export default instance
+export default api;

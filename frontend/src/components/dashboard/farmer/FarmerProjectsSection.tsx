@@ -3,7 +3,7 @@ import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
+import { FiActivity, FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
 import { Project as ApiProject, ProjectStatus, projectApi } from "../../../lib/projectApi";
 import { EditProjectModal } from "./EditProjectModal";
 import { ShareProjectModal } from "./ShareProjectModal";
@@ -36,6 +36,12 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
+  Grid,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
 } from '@chakra-ui/react';
 
 const FarmerProjectsSection: React.FC = () => {
@@ -51,6 +57,7 @@ const FarmerProjectsSection: React.FC = () => {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   // Modal controls
   const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
@@ -83,7 +90,7 @@ const FarmerProjectsSection: React.FC = () => {
         console.log(`  - Status: ${p.status}`);
         console.log(`  - Blockchain Status: ${p.blockchainStatus || 'not_created'}`);
         console.log(`  - Blockchain ID: ${p.blockchainProjectId || 'none'}`);
-        console.log(`  - Funding: $${p.currentFunding} / $${p.fundingGoal}`);
+        console.log(`  - Funding: ${p.currentFunding} MATIC / ${p.fundingGoal} MATIC`);
         console.log('---');
       });
       
@@ -516,18 +523,32 @@ const FarmerProjectsSection: React.FC = () => {
               )}
             </Box>
           ) : (
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
-              {filteredProjects.map((project) => (
-                <ProjectCard 
-                  key={project._id} 
-                  project={project} 
-                  onViewDetails={handleViewDetails}
-                  onEdit={handleEditProject}
-                  onShare={handleShareProject}
-                  showBlockchainInfo={true}
-                />
-              ))}
-            </SimpleGrid>
+            <Tabs 
+              variant="enclosed" 
+              colorScheme="green" 
+              index={activeTab}
+              onChange={setActiveTab}
+            >
+              <TabPanels>
+                {/* Projects Grid Tab */}
+                <TabPanel px={0}>
+                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6}>
+                    {filteredProjects.map((project) => (
+                      <ProjectCard 
+                        key={project._id} 
+                        project={project} 
+                        onViewDetails={handleViewDetails}
+                        onEdit={handleEditProject}
+                        onShare={handleShareProject}
+                        showBlockchainInfo={true}
+                      />
+                    ))}
+                  </SimpleGrid>
+                </TabPanel>
+
+                
+              </TabPanels>
+            </Tabs>
           )}
         </CardBody>
       </Card>

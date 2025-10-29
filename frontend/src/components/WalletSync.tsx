@@ -12,10 +12,12 @@ export default function WalletSync() {
 
   useEffect(() => {
     const syncWallet = async () => {
-   
       if (isConnected && address && isAuthenticated && user && !syncing) {
-        // Skip if wallet already matches
-        if (user.walletAddress?.toLowerCase() === address.toLowerCase()) {
+        // Skip if wallet already matches (check for undefined first)
+        const userWallet = user.walletAddress?.toLowerCase();
+        const connectedWallet = address.toLowerCase();
+        
+        if (userWallet && userWallet === connectedWallet) {
           console.log('✅ Wallet already synced');
           setSynced(true);
           return;
