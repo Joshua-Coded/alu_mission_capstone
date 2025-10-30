@@ -16,6 +16,19 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 
+// Define the same interface here for consistency
+interface CloudinaryFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+  destination?: string;
+  filename?: string;
+  path?: string;
+}
+
 @ApiTags('upload')
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
@@ -39,7 +52,7 @@ export class UploadController {
     },
   })
   @ApiResponse({ status: 201, description: 'Image uploaded successfully' })
-  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+  async uploadImage(@UploadedFile() file: CloudinaryFile) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
@@ -83,7 +96,7 @@ export class UploadController {
     },
   })
   @ApiResponse({ status: 201, description: 'Images uploaded successfully' })
-  async uploadMultipleImages(@UploadedFiles() files: Express.Multer.File[]) {
+  async uploadMultipleImages(@UploadedFiles() files: CloudinaryFile[]) {
     if (!files || files.length === 0) {
       throw new BadRequestException('At least one file is required');
     }
@@ -124,7 +137,7 @@ export class UploadController {
     },
   })
   @ApiResponse({ status: 201, description: 'Document uploaded successfully' })
-  async uploadDocument(@UploadedFile() file: Express.Multer.File) {
+  async uploadDocument(@UploadedFile() file: CloudinaryFile) {
     if (!file) {
       throw new BadRequestException('File is required');
     }

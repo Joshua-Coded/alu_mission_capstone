@@ -2,6 +2,19 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { UploadApiErrorResponse, UploadApiResponse, v2 as cloudinary } from "cloudinary";
 
+// Define a simple file interface locally
+interface CloudinaryFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+  destination?: string;
+  filename?: string;
+  path?: string;
+}
+
 @Injectable()
 export class CloudinaryService {
   constructor(private configService: ConfigService) {
@@ -13,7 +26,7 @@ export class CloudinaryService {
   }
 
   async uploadImage(
-    file: Express.Multer.File,
+    file: CloudinaryFile,
     folder: string = 'rootrise/projects',
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
@@ -37,7 +50,7 @@ export class CloudinaryService {
   }
 
   async uploadMultipleImages(
-    files: Express.Multer.File[],
+    files: CloudinaryFile[],
     folder: string = 'rootrise/projects',
   ): Promise<string[]> {
     const uploadPromises = files.map((file) => this.uploadImage(file, folder));
@@ -46,7 +59,7 @@ export class CloudinaryService {
   }
 
   async uploadDocument(
-    file: Express.Multer.File,
+    file: CloudinaryFile,
     folder: string = 'rootrise/documents',
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
@@ -74,7 +87,6 @@ export class CloudinaryService {
   }
 
   extractPublicId(url: string): string {
-    // Extract public_id from cloudinary URL
     const parts = url.split('/');
     const fileWithExtension = parts[parts.length - 1];
     const publicId = fileWithExtension.split('.')[0];
