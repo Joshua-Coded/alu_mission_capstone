@@ -1,0 +1,15 @@
+bye
+que
+quit
+exit
+console.log('fundProject selector:', fundProject_sig);
+console.log('contribute selector:', contribute_sig);
+const fundProject_sig = factory.interface.getFunction('fundProject').selector;
+const contribute_sig = factory.interface.getFunction('contribute').selector;
+console.log('fundProject selector:', fundProject_sig);
+console.log('contribute selector:', contribute_sig);
+const fundProject_sig = factory.interface.getFunction('fundProject').selector;
+const contribute_sig = factory.interface.getFunction('contribute').selector;
+// Still in hardhat console
+console.log(factory.interface.fragments.filter(f => f.type === 'function').map(f => f.format()));
+const factory = await ethers.getContractAt("ProjectFactory", "0x5387c3bC42304EbfCEFB0aAD1034753217C01b65");

@@ -1,0 +1,42 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/Users/alana/Desktop/alu_mission_capstone/backend/contracts/ProjectFactory.sol": {
+      "lastModificationDate": 1761524675397,
+      "contentHash": "37cfdcc9fd8dcd993e5b73b44e3a767a",
+      "sourceName": "contracts/ProjectFactory.sol",
+      "solcConfig": {
+        "version": "0.8.30",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.30"
+      ],
+      "artifacts": [
+        "ProjectFactory"
+      ]
+    }
+  }
+}

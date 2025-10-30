@@ -27,9 +27,9 @@ export class CloudinaryService {
               { quality: 'auto' },
             ],
           },
-          (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+          (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
             if (error) return reject(error);
-            resolve(result);
+            if (result) resolve(result);
           },
         )
         .end(file.buffer);
@@ -55,11 +55,10 @@ export class CloudinaryService {
           {
             folder: folder,
             resource_type: 'auto',
-            format: 'pdf',
           },
-          (error: UploadApiErrorResponse, result: UploadApiResponse) => {
+          (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
             if (error) return reject(error);
-            resolve(result);
+            if (result) resolve(result);
           },
         )
         .end(file.buffer);
