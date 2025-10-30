@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
-import { GovernmentDepartment } from "src/common/enums/government-department.enum";
+import { GovernmentDepartment } from "../../common/enums/government-department.enum";
 
 export type ProjectDocument = Project & Document & {
   fundingGoalMatic: number;
