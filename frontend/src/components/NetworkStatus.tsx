@@ -4,7 +4,7 @@ import { polygon, polygonMumbai, sepolia } from "wagmi/chains";
 
 export default function NetworkStatus() {
   const chainId = useChainId();
-  const { chains, switchChain } = useSwitchChain();
+  const { switchChain } = useSwitchChain();
 
   const isPolygon = chainId === 137;
   const isTestnet = chainId === 11155111 || chainId === 80001;

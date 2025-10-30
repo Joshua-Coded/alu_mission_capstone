@@ -1,4 +1,4 @@
-import { GovernmentDepartment, Project as ApiProject } from "./projectApi";
+import { Project as ApiProject } from "./projectApi";
 import { ApprovalStep, Project as GovProject, ProjectStatus } from "@/types/government.types";
 
 // Convert backend API project to government dashboard project

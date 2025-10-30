@@ -5,7 +5,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { FiArrowLeft, FiCheck, FiDollarSign, FiEye, FiEyeOff, FiMail, FiMapPin, FiShield, FiUser } from "react-icons/fi";
+import { FiArrowLeft, FiCheck, FiDollarSign, FiEye, FiEyeOff, FiShield, FiUser } from "react-icons/fi";
 import { useAuth } from "../../../src/contexts/AuthContext";
 import type { RegisterData } from "../../../src/lib/api";
 import { GovernmentDepartment, ProjectCategory, UserRole } from "../../../src/lib/api";
@@ -145,7 +145,7 @@ export default function RegisterPage() {
     reset,
     setValue,
   } = useForm<RegisterFormData>({
-    resolver: yupResolver(currentSchema as any),
+    resolver: yupResolver(currentSchema as yup.AnyObjectSchema),
     defaultValues: {
       role: UserRole.FARMER,
       termsAccepted: false,
@@ -224,9 +224,9 @@ export default function RegisterPage() {
         router.push('/auth/login');
       }, 3000);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Registration error:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Registration failed. Please try again.';
+      const errorMessage = err instanceof Error ? err.message : 'Registration failed. Please try again.';
       setError(errorMessage);
       toast({
         title: "Registration Failed",
@@ -272,7 +272,7 @@ export default function RegisterPage() {
                   <Box textAlign="left">
                     <AlertTitle fontSize="md" mb={2}>Email Verification Required</AlertTitle>
                     <AlertDescription fontSize="sm">
-                      We've sent a verification link to <strong>{registeredEmail}</strong>. 
+                      We&apos;ve sent a verification link to <strong>{registeredEmail}</strong>. 
                       Click the link to activate your account and access the {selectedRole} dashboard.
                     </AlertDescription>
                   </Box>
@@ -289,7 +289,7 @@ export default function RegisterPage() {
                 </VStack>
                 <Box pt={4} borderTop="1px" borderColor="gray.200" w="full">
                   <Text fontSize="sm" color="gray.500">
-                    Didn't receive the email? Check your spam folder or contact support.
+                    Didn&apos;t receive the email? Check your spam folder or contact support.
                   </Text>
                 </Box>
               </VStack>

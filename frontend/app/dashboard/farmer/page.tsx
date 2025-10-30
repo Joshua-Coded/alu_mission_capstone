@@ -7,8 +7,9 @@ import WalletConnectionGuard from "@/components/WalletConnectionGuard";
 import WalletSync from "@/components/WalletSync";
 import WalletSyncAlert from "@/components/Walletsyncalert";
 import { useSearchParams } from "next/navigation";
-import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
+
+// import { useAccount } from "wagmi";
 
 import {
   DashboardTab,
@@ -26,7 +27,6 @@ import {
 
 import {
   Box,
-  Container,
   useColorModeValue,
   Spinner,
   VStack,
@@ -71,7 +71,6 @@ function DashboardContent() {
 
 export default function FarmerDashboard() {
   const { user, logout } = useAuth();
-  const { address, isConnected } = useAccount();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 

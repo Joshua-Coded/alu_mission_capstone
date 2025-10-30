@@ -1,7 +1,7 @@
-import  contributionApi  from "@/lib/contributionApi";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import contributionApi from "@/lib/contributionApi";
 import { FiDollarSign, FiFolder, FiTrendingUp, FiUsers } from "react-icons/fi";
-import { projectApi } from "@/lib/projectApi";
+import { Project, projectApi } from "@/lib/projectApi";
 
 import {
   SimpleGrid,
@@ -41,11 +41,32 @@ const FarmerStatsGrid: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
-  useEffect(() => {
-    loadStats();
+  // Mock change calculation functions - you can replace these with real historical data
+  const calculateFundingChange = useCallback((projects: Project[]): number => {
+    if (projects.length === 0) return 0;
+    // For now, return a mock positive change
+    return 12.5;
   }, []);
 
-  const loadStats = async () => {
+  const calculateProjectsChange = useCallback((projects: Project[]): number => {
+    if (projects.length === 0) return 0;
+    // For now, return a mock positive change
+    return 8.2;
+  }, []);
+
+  const calculateContributorsChange = useCallback((projects: Project[]): number => {
+    if (projects.length === 0) return 0;
+    // For now, return a mock positive change
+    return 15.3;
+  }, []);
+
+  const calculateProgressChange = useCallback((projects: Project[]): number => {
+    if (projects.length === 0) return 0;
+    // For now, return a mock positive change
+    return 5.7;
+  }, []);
+
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -57,8 +78,8 @@ const FarmerStatsGrid: React.FC = () => {
       console.log('📈 Projects for stats:', projects.length);
       
       // Calculate real statistics from projects
-      const totalFunding = projects.reduce((sum: number, p: any) => sum + (p.currentFunding || 0), 0);
-      const activeProjects = projects.filter((p: any) => p.status === 'active' || p.status === 'verified').length;
+      const totalFunding = projects.reduce((sum: number, p: Project) => sum + (p.currentFunding || 0), 0);
+      const activeProjects = projects.filter((p: Project) => p.status === 'active' || p.status === 'verified').length;
       const totalProjects = projects.length;
       
       // Calculate total contributors across all projects
@@ -79,33 +100,34 @@ const FarmerStatsGrid: React.FC = () => {
       }
       
       // Calculate average funding progress
-      const projectsWithGoals = projects.filter((p: any) => p.fundingGoal > 0);
+      const projectsWithGoals = projects.filter((p: Project) => p.fundingGoal > 0);
       const avgFundingProgress = projectsWithGoals.length > 0
-        ? projectsWithGoals.reduce((sum: number, p: any) => 
+        ? projectsWithGoals.reduce((sum: number, p: Project) => 
             sum + ((p.currentFunding / p.fundingGoal) * 100), 0) / projectsWithGoals.length
         : 0;
       
       // Calculate changes (you can enhance this with historical data later)
       const calculatedStats: StatsData = {
         totalFunding,
-        fundingChange: calculateFundingChange(projects), // Mock for now
+        fundingChange: calculateFundingChange(projects),
         activeProjects,
-        projectsChange: calculateProjectsChange(projects), // Mock for now
+        projectsChange: calculateProjectsChange(projects),
         totalContributors,
-        contributorsChange: calculateContributorsChange(projects), // Mock for now
+        contributorsChange: calculateContributorsChange(projects),
         avgFundingProgress,
-        progressChange: calculateProgressChange(projects), // Mock for now
+        progressChange: calculateProgressChange(projects),
         totalProjects,
       };
       
       console.log('✅ Calculated stats:', calculatedStats);
       setStats(calculatedStats);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error loading farmer stats:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load dashboard statistics';
       toast({
         title: 'Error loading statistics',
-        description: error.message || 'Failed to load dashboard statistics',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
       });
@@ -125,32 +147,11 @@ const FarmerStatsGrid: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, calculateFundingChange, calculateProjectsChange, calculateContributorsChange, calculateProgressChange]);
 
-  // Mock change calculation functions - you can replace these with real historical data
-  const calculateFundingChange = (projects: any[]): number => {
-    if (projects.length === 0) return 0;
-    // For now, return a mock positive change
-    return 12.5;
-  };
-
-  const calculateProjectsChange = (projects: any[]): number => {
-    if (projects.length === 0) return 0;
-    // For now, return a mock positive change
-    return 8.2;
-  };
-
-  const calculateContributorsChange = (projects: any[]): number => {
-    if (projects.length === 0) return 0;
-    // For now, return a mock positive change
-    return 15.3;
-  };
-
-  const calculateProgressChange = (projects: any[]): number => {
-    if (projects.length === 0) return 0;
-    // For now, return a mock positive change
-    return 5.7;
-  };
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   if (loading) {
     return (

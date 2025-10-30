@@ -139,10 +139,11 @@ export interface DepartmentRecommendations {
   recommendedDepartment: GovernmentDepartment;
   projectCategory: ProjectCategory;
   message: string;
-  departmentOfficials: any[];
+  departmentOfficials: User[]; 
 }
 
-// ✅ ADDED: New interfaces based on backend analysis
+
+//  New interfaces based on backend analysis
 export interface GovernmentDashboard {
   totalProjects: number;
   pendingReview: number;
@@ -151,7 +152,7 @@ export interface GovernmentDashboard {
     department: GovernmentDepartment;
     count: number;
   }>;
-  recentActivity: any[];
+  recentActivity: unknown[];
   totalFunding: number;
   activeProjects: number;
 }
@@ -164,13 +165,18 @@ export interface ProjectStats {
   totalContributors: number;
   successRate: number;
   pendingReview: number;
-  recentActivity: any[];
+  recentActivity: Array<{
+    type: string;
+    message: string;
+    timestamp: Date;
+  }>;
   departmentStats?: Array<{
     department: GovernmentDepartment;
     count: number;
     funding: number;
   }>;
 }
+
 
 export interface CreateProjectDto {
   title: string;
@@ -265,16 +271,21 @@ export interface BlockchainCompletionResponse {
 }
 
 export interface CreateProjectResponse extends Project {
-  categorization?: any;
+  categorization?: {
+    recommendedDepartment?: GovernmentDepartment;
+    confidence?: number;
+    message?: string;
+  };
   message: string;
 }
+
 
 export interface DebugProjectInfo {
   id: string;
   title: string;
   status: string;
-  farmer: any;
-  farmerId: any;
+  farmer: User | string;
+  farmerId: string;
   farmerWallet: string;
   createdAt: string;
 }
@@ -336,7 +347,7 @@ class ProjectApiClient {
     }
     try {
       return localStorage.getItem('authToken');
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -389,31 +400,30 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // ✅ CORRECTED: This endpoint exists in your backend
+  
   async getAllProjectsForGovernment(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/government/dashboard');
     return response.data;
   }
 
-  // ✅ CORRECTED: This endpoint exists in your backend
+
   async getProjectsByDepartment(department: GovernmentDepartment): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>(`/projects/department/${department}`);
     return response.data;
   }
 
-  // ✅ CORRECTED: This endpoint exists in your backend
+
   async getMyDepartmentProjects(): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>('/projects/my-department');
     return response.data;
   }
 
-  // ✅ CORRECTED: This endpoint exists in your backend
   async getDepartmentRecommendations(category: ProjectCategory): Promise<DepartmentRecommendations> {
     const response = await this.api.get<DepartmentRecommendations>(`/projects/department-recommendations/${category}`);
     return response.data;
   }
 
-  // ✅ CORRECTED: This endpoint exists in your backend
+
   async getPendingProjects(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/pending/review');
     return response.data;
@@ -444,7 +454,7 @@ class ProjectApiClient {
   // ==================== CONTRIBUTOR ENDPOINTS ====================
 
   async getVerifiedProjects(category?: string, location?: string): Promise<Project[]> {
-    const params: any = {};
+    const params: Record<string, string> = {};
     if (category) params.category = category;
     if (location) params.location = location;
 
@@ -550,33 +560,40 @@ class ProjectApiClient {
 
   // ==================== DEBUG & TESTING ENDPOINTS ====================
 
-  async debugUserInfo(): Promise<any> {
+  async debugUserInfo(): Promise<{
+    user: User;
+    permissions: string[];
+    department?: GovernmentDepartment;
+  }> {
     const response = await this.api.get('/projects/debug/user-info');
     return response.data;
   }
+  
 
   async debugAllProjects(): Promise<DebugProjectInfo[]> {
     const response = await this.api.get<DebugProjectInfo[]>('/projects/debug/all');
     return response.data;
   }
 
-  // ✅ ADDED: Test API connectivity
-  async testConnection(): Promise<{ success: boolean; message: string; timestamp?: string }> {
-    try {
-      const response = await this.api.get('/health');
-      return {
-        success: true,
-        message: 'API connection successful',
-        timestamp: new Date().toISOString()
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: error.message || 'API connection failed',
-        timestamp: new Date().toISOString()
-      };
-    }
+  // Test API connectivity
+async testConnection(): Promise<{ success: boolean; message: string; timestamp?: string }> {
+  try {
+    await this.api.get('/health');
+    return {
+      success: true,
+      message: 'API connection successful',
+      timestamp: new Date().toISOString()
+    };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'API connection failed';
+    return {
+      success: false,
+      message: errorMessage,
+      timestamp: new Date().toISOString()
+    };
   }
+}
+  
 
   // ==================== BLOCKCHAIN METHODS ====================
 
@@ -610,7 +627,7 @@ class ProjectApiClient {
         blockchainInfo: blockchainStatus.blockchainEnabled ? blockchainStatus : undefined,
         message: blockchainStatus.message
       };
-    } catch (error: any) {
+    } catch {
       const project = await this.getProjectById(id);
       return {
         project,
@@ -619,6 +636,7 @@ class ProjectApiClient {
       };
     }
   }
+  
 
   /**
    * Check if project is ready for contributions
@@ -678,10 +696,11 @@ class ProjectApiClient {
         project,
         blockchainInfo
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to check project status';
       return { 
         ready: false, 
-        reason: error.message || 'Failed to check project status' 
+        reason: errorMessage 
       };
     }
   }
@@ -714,7 +733,7 @@ class ProjectApiClient {
         currency: 'MATIC',
         message: blockchainInfo?.message
       };
-    } catch (error: any) {
+    } catch {
       const project = await this.getProjectById(projectId);
       const progressPercentage = project.fundingGoal > 0 ? (project.currentFunding / project.fundingGoal) * 100 : 0;
       
@@ -778,7 +797,7 @@ class ProjectApiClient {
   }
 
   /**
-   * ✅ ADDED: Get department display name
+   * Get department display name
    */
   getDepartmentDisplayName(department: GovernmentDepartment): string {
     const departmentNames = {
@@ -796,7 +815,7 @@ class ProjectApiClient {
   }
 
   /**
-   * ✅ ADDED: Get category display name
+   * Get category display name
    */
   getCategoryDisplayName(category: ProjectCategory): string {
     const categoryNames = {

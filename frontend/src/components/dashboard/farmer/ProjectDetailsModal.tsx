@@ -32,47 +32,83 @@ import {
   List,
   ListItem,
   Link,
-  Code,
   Alert,
   AlertIcon,
   AlertTitle,
   AlertDescription,
   Progress,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { 
   FiMapPin, 
   FiCalendar, 
   FiDollarSign, 
   FiUsers,
-  FiCheckCircle,
   FiClock,
   FiFileText,
   FiDatabase,
   FiLink,
-  FiAlertCircle,
   FiRefreshCw,
   FiDownload,
 } from 'react-icons/fi';
 
-// ✅ UPDATED: Added onProjectUpdate to the interface
+// Define proper types for blockchain status
+interface BlockchainStatus {
+  totalFunding?: number | string;
+  fundingGoal?: number | string;
+  isFunded?: boolean;
+  canComplete?: boolean;
+}
+
+// Define proper type for verified by field
+interface VerifiedBy {
+  firstName?: string;
+  lastName?: string;
+}
+
 interface ProjectDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   project: ApiProject | null;
-  onProjectUpdate?: () => void; // ✅ ADDED: Optional callback for when project is updated
+  onProjectUpdate?: () => void;
 }
 
 const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
   isOpen,
   onClose,
   project,
-  onProjectUpdate // ✅ ADDED: Destructure the new prop
+  onProjectUpdate
 }) => {
   const [fullProject, setFullProject] = useState<ApiProject | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [blockchainStatus, setBlockchainStatus] = useState<any>(null);
+  const [blockchainStatus, setBlockchainStatus] = useState<BlockchainStatus | null>(null);
   const [refreshingBlockchain, setRefreshingBlockchain] = useState(false);
   const toast = useToast();
+
+  // Move all useColorModeValue hooks to the top - unconditionally
+  const statBgColor = useColorModeValue('gray.50', 'gray.700');
+  const alertBgColors = {
+    info: useColorModeValue('blue.50', 'blue.900'),
+    success: useColorModeValue('green.50', 'green.900'),
+    error: useColorModeValue('red.50', 'red.900'),
+    warning: useColorModeValue('orange.50', 'orange.900'),
+  };
+  const blockchainStatBgColors = {
+    blue: useColorModeValue('blue.50', 'blue.900'),
+    green: useColorModeValue('green.50', 'green.900'),
+    purple: useColorModeValue('purple.50', 'purple.900'),
+    gray: useColorModeValue('gray.50', 'gray.700'),
+  };
+  const documentBgColor = useColorModeValue('gray.50', 'gray.700');
+  const documentHoverBgColor = useColorModeValue('gray.100', 'gray.600');
+  const documentBorderColor = useColorModeValue('gray.200', 'gray.600');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
+  const iconColors = {
+    green: useColorModeValue('green.500', 'green.300'),
+    purple: useColorModeValue('purple.500', 'purple.300'),
+    blue: useColorModeValue('blue.500', 'blue.300'),
+    orange: useColorModeValue('orange.500', 'orange.300'),
+  };
 
   useEffect(() => {
     const fetchProjectDetails = async () => {
@@ -85,10 +121,11 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
           if (data.blockchainStatus === 'created') {
             fetchBlockchainStatus(data._id);
           }
-        } catch (error: any) {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to load project details';
           toast({
             title: 'Error',
-            description: error.message || 'Failed to load project details',
+            description: errorMessage,
             status: 'error',
             duration: 3000,
             isClosable: true,
@@ -100,6 +137,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
     };
 
     fetchProjectDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?._id, isOpen]);
 
   const fetchBlockchainStatus = async (projectId: string) => {
@@ -107,7 +145,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
       setRefreshingBlockchain(true);
       const status = await projectApi.getBlockchainStatus(projectId);
       setBlockchainStatus(status);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to fetch blockchain status:', error);
     } finally {
       setRefreshingBlockchain(false);
@@ -136,7 +174,6 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
       const updatedData = await projectApi.getProjectById(fullProject._id);
       setFullProject(updatedData);
       
-      // ✅ ADDED: Call the update callback if provided
       if (onProjectUpdate) {
         onProjectUpdate();
       }
@@ -147,10 +184,11 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
         status: 'success',
         duration: 3000,
       });
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to sync with blockchain';
       toast({
         title: 'Sync Failed',
-        description: error.message || 'Failed to sync with blockchain',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -160,13 +198,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
     }
   };
 
-  // ✅ ADDED: Function to handle project updates
-  const handleProjectUpdate = () => {
-    if (onProjectUpdate) {
-      onProjectUpdate();
-    }
-  };
-
+  // Early return must come AFTER all hooks
   if (!project) return null;
 
   const getStatusColor = (status: string) => {
@@ -216,7 +248,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                 </>
               )}
             </HStack>
-            <HStack spacing={4} fontSize="sm" color="gray.600">
+            <HStack spacing={4} fontSize="sm" color={textColor}>
               <HStack>
                 <Icon as={FiMapPin} />
                 <Text>{project.location}</Text>
@@ -234,7 +266,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
           {isLoading ? (
             <VStack spacing={4} py={12}>
               <Spinner size="xl" color="green.500" thickness="4px" />
-              <Text color="gray.600">Loading project details...</Text>
+              <Text color={textColor}>Loading project details...</Text>
             </VStack>
           ) : fullProject ? (
             <Tabs variant="enclosed" colorScheme="green">
@@ -251,19 +283,19 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                   <VStack spacing={6} align="stretch">
                     {/* Status Alerts */}
                     {fullProject.status === 'submitted' && (
-                      <Alert status="info" borderRadius="lg">
+                      <Alert status="info" borderRadius="lg" bg={alertBgColors.info}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Under Review</AlertTitle>
                           <AlertDescription>
-                            Your project is being reviewed by government officials. You'll be notified once approved.
+                            Your project is being reviewed by government officials. You&apos;ll be notified once approved.
                           </AlertDescription>
                         </Box>
                       </Alert>
                     )}
 
                     {fullProject.status === 'active' && (
-                      <Alert status="success" borderRadius="lg">
+                      <Alert status="success" borderRadius="lg" bg={alertBgColors.success}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Project Approved ✓</AlertTitle>
@@ -275,7 +307,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                     )}
 
                     {fullProject.blockchainStatus === 'failed' && (
-                      <Alert status="error" borderRadius="lg">
+                      <Alert status="error" borderRadius="lg" bg={alertBgColors.error}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Blockchain Error</AlertTitle>
@@ -293,7 +325,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                       </Text>
                       <VStack spacing={3} align="stretch">
                         <HStack justify="space-between">
-                          <Text fontSize="sm" color="gray.600">Current / Goal</Text>
+                          <Text fontSize="sm" color={textColor}>Current / Goal</Text>
                           <HStack spacing={2}>
                             <Text fontSize="lg" fontWeight="bold" color="purple.600">
                               {fullProject.currentFunding.toFixed(4)}
@@ -316,7 +348,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                           borderRadius="full"
                         />
                         <HStack justify="space-between">
-                          <Text fontSize="sm" color="gray.600">
+                          <Text fontSize="sm" color={textColor}>
                             {progressPercentage.toFixed(1)}% funded
                           </Text>
                           <Badge colorScheme={progressPercentage >= 100 ? 'green' : 'blue'}>
@@ -328,25 +360,25 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
 
                     {/* Key Stats */}
                     <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4}>
-                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                      <Stat bg={statBgColor} p={4} borderRadius="lg">
                         <StatLabel fontSize="xs">Funding Goal</StatLabel>
                         <StatNumber fontSize="lg" color="green.600">
                           {fullProject.fundingGoal.toFixed(4)}
                         </StatNumber>
                         <StatHelpText fontSize="xs" color="purple.500">MATIC</StatHelpText>
                       </Stat>
-                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                      <Stat bg={statBgColor} p={4} borderRadius="lg">
                         <StatLabel fontSize="xs">Current Funding</StatLabel>
                         <StatNumber fontSize="lg" color="purple.600">
                           {fullProject.currentFunding.toFixed(4)}
                         </StatNumber>
                         <StatHelpText fontSize="xs" color="purple.500">MATIC</StatHelpText>
                       </Stat>
-                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                      <Stat bg={statBgColor} p={4} borderRadius="lg">
                         <StatLabel fontSize="xs">Contributors</StatLabel>
                         <StatNumber fontSize="xl">{fullProject.contributorsCount}</StatNumber>
                       </Stat>
-                      <Stat bg="gray.50" p={4} borderRadius="lg">
+                      <Stat bg={statBgColor} p={4} borderRadius="lg">
                         <StatLabel fontSize="xs">Progress</StatLabel>
                         <StatNumber fontSize="xl" color="purple.600">
                           {Math.round(progressPercentage)}%
@@ -399,33 +431,33 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                       </Text>
                       <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                         <HStack>
-                          <Icon as={FiMapPin} color="green.500" boxSize={5} />
+                          <Icon as={FiMapPin} color={iconColors.green} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Location</Text>
+                            <Text fontSize="xs" color={textColor}>Location</Text>
                             <Text fontSize="sm" fontWeight="medium">{fullProject.location}</Text>
                           </VStack>
                         </HStack>
                         
                         <HStack>
-                          <Icon as={FiCalendar} color="purple.500" boxSize={5} />
+                          <Icon as={FiCalendar} color={iconColors.purple} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Timeline</Text>
+                            <Text fontSize="xs" color={textColor}>Timeline</Text>
                             <Text fontSize="sm" fontWeight="medium">{fullProject.timeline}</Text>
                           </VStack>
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiDatabase} color="blue.500" boxSize={5} />
+                          <Icon as={FiDatabase} color={iconColors.blue} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Category</Text>
+                            <Text fontSize="xs" color={textColor}>Category</Text>
                             <Badge colorScheme="blue">{fullProject.category.replace(/_/g, ' ')}</Badge>
                           </VStack>
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiClock} color="orange.500" boxSize={5} />
+                          <Icon as={FiClock} color={iconColors.orange} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Created</Text>
+                            <Text fontSize="xs" color={textColor}>Created</Text>
                             <Text fontSize="sm" fontWeight="medium">
                               {new Date(fullProject.createdAt).toLocaleDateString()}
                             </Text>
@@ -433,9 +465,9 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiDollarSign} color="green.500" boxSize={5} />
+                          <Icon as={FiDollarSign} color={iconColors.green} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Funding Goal</Text>
+                            <Text fontSize="xs" color={textColor}>Funding Goal</Text>
                             <HStack spacing={1}>
                               <Text fontSize="sm" fontWeight="bold" color="green.600">
                                 {fullProject.fundingGoal.toFixed(4)}
@@ -448,9 +480,9 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </HStack>
 
                         <HStack>
-                          <Icon as={FiUsers} color="blue.500" boxSize={5} />
+                          <Icon as={FiUsers} color={iconColors.blue} boxSize={5} />
                           <VStack align="start" spacing={0}>
-                            <Text fontSize="xs" color="gray.500">Contributors</Text>
+                            <Text fontSize="xs" color={textColor}>Contributors</Text>
                             <Text fontSize="sm" fontWeight="medium">{fullProject.contributorsCount} people</Text>
                           </VStack>
                         </HStack>
@@ -466,14 +498,14 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                           Verification Status
                         </Text>
                         {fullProject.verification.verifiedBy ? (
-                          <Alert status="success" borderRadius="lg">
+                          <Alert status="success" borderRadius="lg" bg={alertBgColors.success}>
                             <AlertIcon />
                             <Box flex="1">
                               <AlertTitle>Government Verified ✓</AlertTitle>
                               <AlertDescription>
                                 Verified by: {typeof fullProject.verification.verifiedBy === 'string' 
                                   ? fullProject.verification.verifiedBy 
-                                  : `${(fullProject.verification.verifiedBy as any)?.firstName || ''} ${(fullProject.verification.verifiedBy as any)?.lastName || ''}`.trim() || 'Official'}
+                                  : `${(fullProject.verification.verifiedBy as VerifiedBy)?.firstName || ''} ${(fullProject.verification.verifiedBy as VerifiedBy)?.lastName || ''}`.trim() || 'Official'}
                                 {fullProject.verification.verifiedAt && (
                                   <Text fontSize="xs" mt={1}>
                                     Verified on: {new Date(fullProject.verification.verifiedAt).toLocaleDateString()}
@@ -483,7 +515,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                             </Box>
                           </Alert>
                         ) : (
-                          <Alert status="warning" borderRadius="lg">
+                          <Alert status="warning" borderRadius="lg" bg={alertBgColors.warning}>
                             <AlertIcon />
                             <Box flex="1">
                               <AlertTitle>Pending Verification</AlertTitle>
@@ -529,7 +561,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
 
                     {isOnBlockchain ? (
                       <VStack spacing={4} align="stretch">
-                        <Alert status="success" borderRadius="lg">
+                        <Alert status="success" borderRadius="lg" bg={alertBgColors.success}>
                           <AlertIcon />
                           <Box flex="1">
                             <AlertTitle>On Blockchain ⛓️</AlertTitle>
@@ -540,14 +572,14 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </Alert>
 
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                          <Stat bg="blue.50" p={4} borderRadius="lg">
+                          <Stat bg={blockchainStatBgColors.blue} p={4} borderRadius="lg">
                             <StatLabel>Blockchain ID</StatLabel>
                             <StatNumber fontSize="2xl" color="blue.600">
                               #{fullProject.blockchainProjectId}
                             </StatNumber>
                           </Stat>
 
-                          <Stat bg="green.50" p={4} borderRadius="lg">
+                          <Stat bg={blockchainStatBgColors.green} p={4} borderRadius="lg">
                             <StatLabel>Status</StatLabel>
                             <StatNumber>
                               <Badge colorScheme="green" fontSize="md">Active</Badge>
@@ -555,7 +587,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                           </Stat>
 
                           {fullProject.blockchainCreatedAt && (
-                            <Stat bg="purple.50" p={4} borderRadius="lg">
+                            <Stat bg={blockchainStatBgColors.purple} p={4} borderRadius="lg">
                               <StatLabel>Created On</StatLabel>
                               <StatNumber fontSize="sm">
                                 {new Date(fullProject.blockchainCreatedAt).toLocaleDateString()}
@@ -564,7 +596,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                           )}
 
                           {fullProject.blockchainTxHash && (
-                            <Stat bg="gray.50" p={4} borderRadius="lg">
+                            <Stat bg={blockchainStatBgColors.gray} p={4} borderRadius="lg">
                               <StatLabel>Transaction</StatLabel>
                               <Link
                                 href={`https://polygonscan.com/tx/${fullProject.blockchainTxHash}`}
@@ -585,7 +617,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </SimpleGrid>
 
                         {blockchainStatus && (
-                          <Box p={4} bg="purple.50" borderRadius="lg" border="1px" borderColor="purple.200">
+                          <Box p={4} bg={blockchainStatBgColors.purple} borderRadius="lg" border="1px" borderColor="purple.200">
                             <Text fontWeight="bold" mb={3}>Live Blockchain Data</Text>
                             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                               <HStack justify="space-between">
@@ -613,7 +645,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         )}
                       </VStack>
                     ) : fullProject.blockchainStatus === 'failed' ? (
-                      <Alert status="error" borderRadius="lg">
+                      <Alert status="error" borderRadius="lg" bg={alertBgColors.error}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Blockchain Creation Failed</AlertTitle>
@@ -623,7 +655,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </Box>
                       </Alert>
                     ) : fullProject.blockchainStatus === 'pending' ? (
-                      <Alert status="warning" borderRadius="lg">
+                      <Alert status="warning" borderRadius="lg" bg={alertBgColors.warning}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Creating on Blockchain...</AlertTitle>
@@ -633,7 +665,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         </Box>
                       </Alert>
                     ) : (
-                      <Alert status="info" borderRadius="lg">
+                      <Alert status="info" borderRadius="lg" bg={alertBgColors.info}>
                         <AlertIcon />
                         <Box flex="1">
                           <AlertTitle>Not on Blockchain Yet</AlertTitle>
@@ -659,27 +691,27 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                           <ListItem 
                             key={index} 
                             p={4} 
-                            bg="gray.50" 
+                            bg={documentBgColor}
                             borderRadius="lg"
                             border="1px"
-                            borderColor="gray.200"
-                            _hover={{ bg: 'gray.100', borderColor: 'green.300' }}
+                            borderColor={documentBorderColor}
+                            _hover={{ bg: documentHoverBgColor, borderColor: 'green.300' }}
                             transition="all 0.2s"
                           >
                             <HStack justify="space-between">
                               <HStack spacing={3}>
-                                <Icon as={FiFileText} color="blue.500" boxSize={5} />
+                                <Icon as={FiFileText} color={iconColors.blue} boxSize={5} />
                                 <VStack align="start" spacing={1}>
                                   <Text fontSize="sm" fontWeight="medium">
                                     {doc.name || 'Unnamed Document'}
                                   </Text>
-                                  <HStack spacing={3} fontSize="xs" color="gray.500">
+                                  <HStack spacing={3} fontSize="xs" color={textColor}>
                                     <Text>
                                       {doc.name?.split('.')?.pop()?.toUpperCase() || 'FILE'}
                                     </Text>
-                                    {(doc as any).uploadedAt && (
+                                    {(doc as { uploadedAt?: string }).uploadedAt && (
                                       <Text>
-                                        {new Date((doc as any).uploadedAt).toLocaleDateString()}
+                                        {new Date((doc as { uploadedAt: string }).uploadedAt).toLocaleDateString()}
                                       </Text>
                                     )}
                                   </HStack>
@@ -702,9 +734,9 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
                         ))}
                       </List>
                     ) : (
-                      <Box p={8} textAlign="center" bg="gray.50" borderRadius="lg">
+                      <Box p={8} textAlign="center" bg={documentBgColor} borderRadius="lg">
                         <Icon as={FiFileText} boxSize={12} color="gray.400" mb={3} />
-                        <Text color="gray.600" fontSize="sm">
+                        <Text color={textColor} fontSize="sm">
                           No documents uploaded for this project
                         </Text>
                       </Box>

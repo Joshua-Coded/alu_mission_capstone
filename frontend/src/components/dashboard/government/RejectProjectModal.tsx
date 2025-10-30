@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FiAlertTriangle, FiInfo, FiMail, FiXCircle } from "react-icons/fi";
-import { Project, projectApi } from "@/lib/projectApi";
+import { Project } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/dashboard/government/RejectProjectModal.tsx
@@ -29,7 +29,6 @@ import {
   HStack,
   Icon,
   Divider,
-  Badge,
   List,
   ListItem,
   ListIcon,
@@ -162,11 +161,11 @@ ${notifyFarmer ? '\nNote: Farmer has been notified via email' : ''}
       setComment('');
       setNotifyFarmer(true);
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error rejecting project:', error);
       toast({
         title: 'Rejection Failed',
-        description: error.message || 'Failed to reject project. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to reject project. Please try again.',
         status: 'error',
         duration: 3000,
       });
@@ -317,7 +316,7 @@ ${notifyFarmer ? '\nNote: Farmer has been notified via email' : ''}
                   </ListItem>
                   <ListItem>
                     <ListIcon as={FiInfo} color="orange.500" />
-                    The project status will change to "Rejected"
+                    The project status will change to &quot;Rejected&quot;
                   </ListItem>
                   <ListItem>
                     <ListIcon as={FiInfo} color="orange.500" />

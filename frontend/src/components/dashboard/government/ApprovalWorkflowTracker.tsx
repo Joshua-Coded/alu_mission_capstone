@@ -1,7 +1,7 @@
 import { SimpleGrid } from "@chakra-ui/react";
 import { useState } from "react";
 import { FiAlertCircle, FiArrowRight, FiCheckCircle, FiCircle, FiClock } from "react-icons/fi";
-import { Project, ProjectStatus, projectApi } from "@/lib/projectApi";
+import { Project, projectApi } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/government/ApprovalWorkflowTracker.tsx
@@ -104,7 +104,6 @@ export default function ApprovalWorkflowTracker({ project, onUpdate }: ApprovalW
 
   const progress = ((currentStepIndex + 1) / WORKFLOW_STEPS.length) * 100;
   const currentStep = WORKFLOW_STEPS[currentStepIndex] || WORKFLOW_STEPS[0];
-  const isLastStep = currentStepIndex === WORKFLOW_STEPS.length - 1;
   const isProjectApproved = project.status === 'active' || project.status === 'funded';
   const isProjectRejected = project.status === 'rejected';
 
@@ -142,15 +141,16 @@ export default function ApprovalWorkflowTracker({ project, onUpdate }: ApprovalW
 
       onUpdate(updatedProject);
       setStepNotes('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error moving project to review:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to update project status',
+        description: error instanceof Error ? error.message : 'Failed to update project status',
         status: 'error',
         duration: 3000,
       });
-    } finally {
+    }
+     finally {
       setIsSubmitting(false);
     }
   };
@@ -188,15 +188,16 @@ export default function ApprovalWorkflowTracker({ project, onUpdate }: ApprovalW
 
       onUpdate(updatedProject);
       setStepNotes('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error approving project:', error);
       toast({
         title: 'Approval Failed',
-        description: error.message || 'Failed to approve project',
+        description: error instanceof Error ? error.message : 'Failed to approve project',
         status: 'error',
         duration: 3000,
       });
-    } finally {
+    }
+     finally {
       setIsSubmitting(false);
     }
   };
@@ -225,15 +226,16 @@ export default function ApprovalWorkflowTracker({ project, onUpdate }: ApprovalW
 
       onUpdate(updatedProject);
       setStepNotes('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error rejecting project:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to reject project',
+        description: error instanceof Error ? error.message : 'Failed to reject project',
         status: 'error',
         duration: 3000,
       });
-    } finally {
+    }
+     finally {
       setIsSubmitting(false);
     }
   };

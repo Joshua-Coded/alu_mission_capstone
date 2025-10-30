@@ -20,7 +20,13 @@ export interface Project {
     updatedAt: string | Date;
     
     // Farmer info (can be object or string)
-    farmer: any;
+    farmer: string | {
+      _id: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      [key: string]: unknown;
+    };
     
     // Optional fields
     district?: string;
@@ -30,7 +36,13 @@ export interface Project {
     // Due diligence
     dueDiligence?: {
       status: 'pending' | 'in_progress' | 'completed';
-      assignedTo?: any;
+      assignedTo?: string | {
+        _id: string;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+        [key: string]: unknown;
+      };
       startedAt?: Date;
       completedAt?: Date;
       notes: string;
@@ -43,7 +55,13 @@ export interface Project {
     
     // Verification
     verification?: {
-      verifiedBy?: any;
+      verifiedBy?: string | {
+        _id: string;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+        [key: string]: unknown;
+      };
       verifiedAt?: Date;
       documentHash?: string;
       rejectionReason?: string;

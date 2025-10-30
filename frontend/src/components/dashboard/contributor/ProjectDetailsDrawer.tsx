@@ -1,6 +1,6 @@
 import ProjectSuccessView from "../farmer/ProjectSuccessView";
 import contributionApi from "../../../lib/contributionApi";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Project, projectApi } from "../../../lib/projectApi";
 
@@ -49,30 +49,58 @@ export default function ProjectDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [activeImage, setActiveImage] = useState(0);
-  const [blockchainData, setBlockchainData] = useState<any>(null);
-  const [loadingBlockchain, setLoadingBlockchain] = useState(false);
-  const [realContributorCount, setRealContributorCount] = useState<number>(0); // ✅ ADDED: Real contributor count
+  const [blockchainData, setBlockchainData] = useState<Record<string, unknown> | null>(null);
+  const [realContributorCount, setRealContributorCount] = useState<number>(0);
   const [loadingContributions, setLoadingContributions] = useState(false);
+  const [, setLoadingBlockchain] = useState(false);
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 
-  useEffect(() => {
-    if (projectId) {
-      fetchProject();
+  const fetchProjectContributions = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      setLoadingContributions(true);
+      const result = await contributionApi.getProjectContributions(projectId);
+      if (result.success && result.data) {
+        setRealContributorCount(result.data.contributorCount || 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch project contributions:', error);
+      setRealContributorCount(project?.contributorsCount || 0);
+    } finally {
+      setLoadingContributions(false);
     }
-  }, [projectId]);
+  }, [projectId, project?.contributorsCount]);
 
-  const fetchProject = async () => {
+  const fetchBlockchainData = useCallback(async (projId: string) => {
+    try {
+      setLoadingBlockchain(true);
+      const response = await projectApi.getBlockchainStatus(projId);
+      
+      if (response.blockchainEnabled) {
+        setBlockchainData({
+          currentFunding: response.totalFunding?.toString() || '0',
+          fundingGoal: response.fundingGoal?.toString() || '0',
+          isFullyFunded: response.isFunded || false,
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Failed to fetch blockchain data:', error);
+    } finally {
+      setLoadingBlockchain(false);
+    }
+  }, []);
+
+  const fetchProject = useCallback(async () => {
+    if (!projectId) return;
     try {
       setLoading(true);
-      const data = await projectApi.getProjectById(projectId!);
+      const data = await projectApi.getProjectById(projectId);
       setProject(data);
-      
-      // ✅ FIXED: Fetch real contribution data
-      fetchProjectContributions(data._id);
-      
+      await fetchProjectContributions();
+       
       // Fetch blockchain data if project is on-chain
       if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
         fetchBlockchainData(data._id);
@@ -82,13 +110,14 @@ export default function ProjectDetailsPage() {
       try {
         const favorites = await projectApi.getFavorites();
         setIsFavorite(favorites.some((f: Project) => f._id === projectId));
-      } catch (err) {
+      } catch {
         console.log('Favorites not available');
       }
-    } catch (err: any) {
+    } catch (err) {
+      console.error(err instanceof Error ? err : 'Unknown fetch error');
       toast({
         title: 'Error Loading Project',
-        description: err.message || 'Failed to load project details',
+        description: err instanceof Error ? err.message : 'Failed to load project details',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -96,48 +125,13 @@ export default function ProjectDetailsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, fetchProjectContributions, fetchBlockchainData, toast]);
 
-  // ✅ ADDED: Fetch real contribution data
-  const fetchProjectContributions = async (projectId: string) => {
-    try {
-      setLoadingContributions(true);
-      const contributionsResult = await contributionApi.getProjectContributions(projectId);
-      
-      if (contributionsResult.success && contributionsResult.data) {
-        setRealContributorCount(contributionsResult.data.contributorCount || 0);
-      } else {
-        // Fallback to project's contributor count
-        setRealContributorCount(project?.contributorsCount || 0);
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch project contributions:', error);
-      // Fallback to project's contributor count
-      setRealContributorCount(project?.contributorsCount || 0);
-    } finally {
-      setLoadingContributions(false);
+  useEffect(() => {
+    if (projectId) {
+      fetchProject();
     }
-  };
-
-  const fetchBlockchainData = async (projectId: string) => {
-    try {
-      setLoadingBlockchain(true);
-      const response = await projectApi.getBlockchainStatus(projectId);
-      
-      if (response.blockchainEnabled) {
-        setBlockchainData({
-          currentFunding: response.totalFunding?.toString() || '0',
-          fundingGoal: response.fundingGoal?.toString() || '0',
-          isFullyFunded: response.isFunded || false,
-          
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch blockchain data:', error);
-    } finally {
-      setLoadingBlockchain(false);
-    }
-  };
+  }, [projectId, fetchProject]);
 
   const handleFavorite = async () => {
     try {
@@ -150,7 +144,7 @@ export default function ProjectDetailsPage() {
         setIsFavorite(true);
         toast({ title: 'Added to favorites', status: 'success', duration: 2000 });
       }
-    } catch (err) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to update favorites', status: 'error', duration: 3000 });
     }
   };
@@ -192,13 +186,12 @@ export default function ProjectDetailsPage() {
     );
   }
 
-  // ✅ UPDATED: Calculate if project is fully funded with real data
   const currentFunding = blockchainData?.currentFunding 
-    ? parseFloat(blockchainData.currentFunding) 
+    ? parseFloat(blockchainData.currentFunding as string) 
     : project.currentFunding;
     
   const fundingGoal = blockchainData?.fundingGoal 
-    ? parseFloat(blockchainData.fundingGoal) 
+    ? parseFloat(blockchainData.fundingGoal as string) 
     : project.fundingGoal;
 
   const isFullyFunded = blockchainData?.isFullyFunded || 
@@ -208,8 +201,7 @@ export default function ProjectDetailsPage() {
   const hasImages = project.images && project.images.length > 0;
   const currentImage = hasImages ? project.images[activeImage] : defaultImage;
 
-  // ✅ UPDATED: Use real contributor count from API
-  const contributorCount = blockchainData?.contributorCount || realContributorCount || project.contributorsCount || 0;
+  const contributorCount = realContributorCount || project.contributorsCount || 0;
 
   return (
     <Box minH="100vh" bg={bgColor}>
@@ -495,13 +487,11 @@ export default function ProjectDetailsPage() {
                       </VStack>
                     </TabPanel>
 
-                    {/* ✅ NEW: Success Story Tab (only shows if funded) */}
                     {isFullyFunded && (
                       <TabPanel px={0}>
                         <ProjectSuccessView
                           project={project}
                           blockchainData={blockchainData}
-                          
                         />
                       </TabPanel>
                     )}
@@ -515,13 +505,11 @@ export default function ProjectDetailsPage() {
           <GridItem>
             <Box position="sticky" top="100px">
               <VStack spacing={6} align="stretch">
-                {/* ✅ Show Success View or Regular Funding */}
                 {isFullyFunded ? (
                   <Box bg={cardBg} borderRadius="lg" p={6} shadow="lg" border="2px" borderColor="purple.300">
                     <ProjectSuccessView
                       project={project}
                       blockchainData={blockchainData}
-                  
                     />
                   </Box>
                 ) : (

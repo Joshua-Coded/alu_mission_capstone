@@ -41,7 +41,6 @@ import {
   FiChevronDown,
   FiCalendar,
   FiBarChart2,
-  FiUsers,
   FiCheckCircle,
 } from 'react-icons/fi';
 
@@ -96,7 +95,7 @@ export default function QuickActions({ projects, pendingCount, onRefresh }: Quic
         status: 'success',
         duration: 3000,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Export Failed',
         description: 'Failed to export data',
@@ -126,7 +125,7 @@ export default function QuickActions({ projects, pendingCount, onRefresh }: Quic
         status: 'success',
         duration: 3000,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Export Failed',
         description: 'Failed to export data',
@@ -243,7 +242,7 @@ ${i + 1}. ${p.title}
       });
 
       onClose();
-    } catch (error) {
+    } catch {
       toast({
         title: 'Report Generation Failed',
         description: 'Failed to generate report',
@@ -255,16 +254,7 @@ ${i + 1}. ${p.title}
     }
   };
 
-  // Filter to pending only
-  const handleFilterPending = () => {
-    toast({
-      title: 'Filter Applied',
-      description: 'Showing pending projects only',
-      status: 'info',
-      duration: 2000,
-    });
-    // This would typically trigger a filter in the parent component
-  };
+  // Removed unused handleFilterPending function
 
   return (
     <>

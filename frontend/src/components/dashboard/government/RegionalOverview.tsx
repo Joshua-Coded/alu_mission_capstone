@@ -1,7 +1,7 @@
 import  contributionApi  from "@/lib/contributionApi";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { FiMapPin, FiRefreshCw, FiTrendingUp } from "react-icons/fi";
-import { Project, projectApi } from "@/lib/projectApi";
+import { Project } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/dashboard/government/RegionalOverview.tsx
@@ -27,7 +27,6 @@ import {
   Tooltip,
   Progress,
   Button,
-  Spinner,
   useToast,
   VStack,
   Alert,
@@ -57,16 +56,15 @@ interface RegionalData {
 export default function RegionalOverview({ projects, onRefresh }: RegionalOverviewProps) {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const rowHoverBg = useColorModeValue('gray.50', 'gray.700');
+  const totalsBg = useColorModeValue('purple.50', 'gray.700');
+  const summaryBg = useColorModeValue('gray.50', 'gray.700');
   const [loading, setLoading] = useState(false);
   const [regionalContributions, setRegionalContributions] = useState<Map<string, number>>(new Map());
   const toast = useToast();
 
   // Fetch contribution data for each region
-  useEffect(() => {
-    fetchRegionalContributionData();
-  }, [projects]);
-
-  const fetchRegionalContributionData = async () => {
+  const fetchRegionalContributionData = useCallback(async () => {
     try {
       setLoading(true);
       const contributionsMap = new Map<string, number>();
@@ -88,7 +86,7 @@ export default function RegionalOverview({ projects, onRefresh }: RegionalOvervi
       }
 
       setRegionalContributions(contributionsMap);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching regional contribution data:', error);
       toast({
         title: 'Error loading contribution data',
@@ -99,7 +97,11 @@ export default function RegionalOverview({ projects, onRefresh }: RegionalOvervi
     } finally {
       setLoading(false);
     }
-  };
+  }, [projects, toast]);
+
+  useEffect(() => {
+    fetchRegionalContributionData();
+  }, [projects, fetchRegionalContributionData]);
 
   // Calculate regional statistics from projects
   const regionalData = useMemo(() => {
@@ -321,7 +323,7 @@ export default function RegionalOverview({ projects, onRefresh }: RegionalOvervi
                   : 0;
 
                 return (
-                  <Tr key={index} _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}>
+                  <Tr key={index} _hover={{ bg: rowHoverBg }}>
                     <Td fontWeight="medium">
                       <HStack>
                         <Icon as={FiMapPin} color="purple.400" boxSize={4} />
@@ -426,7 +428,7 @@ export default function RegionalOverview({ projects, onRefresh }: RegionalOvervi
               })}
               
               {/* Totals Row */}
-              <Tr bg={useColorModeValue('purple.50', 'gray.700')} fontWeight="bold">
+              <Tr bg={totalsBg} fontWeight="bold">
                 <Td>
                   <HStack>
                     <Icon as={FiTrendingUp} color="purple.500" />
@@ -465,7 +467,7 @@ export default function RegionalOverview({ projects, onRefresh }: RegionalOvervi
         </TableContainer>
 
         {/* Summary Stats */}
-        <Box mt={4} p={3} bg={useColorModeValue('gray.50', 'gray.700')} borderRadius="md">
+        <Box mt={4} p={3} bg={summaryBg} borderRadius="md">
           <HStack justify="space-around" fontSize="sm" flexWrap="wrap" spacing={4}>
             <Box textAlign="center">
               <Text color="gray.600" fontSize="xs">Top Region</Text>

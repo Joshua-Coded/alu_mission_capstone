@@ -1,8 +1,9 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import contributionApi, { ContributionStats } from "@/lib/contributionApi";
+import contributionApi, { ContributionStats, Contribution } from "@/lib/contributionApi";
 import { useRouter } from "next/navigation";
 import { Project, projectApi } from "@/lib/projectApi";
+import { Image } from "@chakra-ui/react";
 
 interface DashboardStats extends ContributionStats {
   activeProjects: number;
@@ -12,7 +13,7 @@ const ContributorDashboard: React.FC = () => {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentProjects, setRecentProjects] = useState<Project[]>([]);
-  const [recentContributions, setRecentContributions] = useState<any[]>([]);
+  const [recentContributions, setRecentContributions] = useState<Contribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,9 +50,9 @@ const ContributorDashboard: React.FC = () => {
       } else {
         setError(statsResult.error || 'Failed to load dashboard data');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Dashboard error:', err);
-      setError(err.message || 'An error occurred while loading dashboard data');
+      setError((err as Error).message || 'An error occurred while loading dashboard data');
     } finally {
       setLoading(false);
     }
@@ -294,7 +295,13 @@ const ContributorDashboard: React.FC = () => {
                     >
                       <div className="h-48 bg-gray-200">
                         {project.images && project.images.length > 0 ? (
-                          <img src={project.images[0]} alt={project.title} className="w-full h-full object-cover" />
+                          <Image
+                            src={project.images[0]}
+                            alt={project.title}
+                            className="w-full h-full object-cover"
+                            width={200}
+                            height={100}
+                          />
                         ) : (
                           <div className="flex items-center justify-center h-full text-gray-400">No Image</div>
                         )}

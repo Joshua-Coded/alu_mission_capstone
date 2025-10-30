@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FiAlertCircle, FiCalendar, FiFileText } from "react-icons/fi";
-import { Project, projectApi } from "@/lib/projectApi";
+import { Project } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/dashboard/government/RevisionRequestModal.tsx
@@ -132,11 +132,11 @@ Project: ${project.title}
       setComment('');
       setDueDate('');
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error requesting revision:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to request revision',
+        description: error instanceof Error ? error.message : 'Failed to request revision',
         status: 'error',
         duration: 3000,
       });
@@ -280,7 +280,7 @@ Project: ${project.title}
                   Project Status Change
                 </Text>
                 <Text fontSize="xs">
-                  The project will remain in "Under Review" status with notes attached. 
+                  The project will remain in &quot;Under Review&quot; status with notes attached. 
                   The farmer will be notified via their dashboard.
                 </Text>
               </Box>

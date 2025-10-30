@@ -61,7 +61,6 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [fullProjectData, setFullProjectData] = useState<ApiProject | null>(null);
   
   const toast = useToast();
 
@@ -93,7 +92,6 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         setIsLoading(true);
         try {
           const fullProject = await projectApi.getProjectById(project._id); // FIXED: Use _id
-          setFullProjectData(fullProject);
           
           // Set form data from full project
           setFormData({
@@ -122,7 +120,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     };
 
     fetchProjectDetails();
-  }, [project?._id, isOpen]); // FIXED: Use _id instead of id
+  }, [project?._id, isOpen, toast]); // FIXED: Use _id instead of id
 
   // Reset form when modal closes
   useEffect(() => {
@@ -130,7 +128,6 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
       setNewImages([]);
       setNewImagePreviews([]);
       setExistingImages([]);
-      setFullProjectData(null);
     }
   }, [isOpen]);
 
@@ -194,7 +191,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     setExistingImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleInputChange = (field: keyof UpdateProjectDto, value: any) => {
+  const handleInputChange = (field: keyof UpdateProjectDto, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -244,12 +241,12 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
       // Call onSave with the updated ApiProject
       onSave(updatedProject);
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Update error:', error);
       toast({
-        title: "Update Failed",
-        description: error.message || "There was an error updating your project.",
-        status: "error",
+        title: 'Update Failed',
+        description: error instanceof Error ? error.message : 'There was an error updating your project.',
+        status: 'error',
         duration: 5000,
         isClosable: true,
       });

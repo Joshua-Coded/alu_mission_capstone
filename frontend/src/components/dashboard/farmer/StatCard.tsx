@@ -9,7 +9,6 @@ import {
   Icon,
   useColorModeValue,
   Tooltip,
-  Badge,
 } from '@chakra-ui/react';
 
 interface StatCardProps {
@@ -40,7 +39,6 @@ const StatCard: React.FC<StatCardProps> = ({
   const textColor = useColorModeValue('gray.700', 'gray.200');
   
   const isPositive = change !== undefined && change > 0;
-  const isNegative = change !== undefined && change < 0;
   const isNeutral = change === 0;
 
   const colorSchemes: Record<string, string> = {

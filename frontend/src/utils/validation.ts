@@ -2,8 +2,19 @@ export interface ValidationResult {
     isValid: boolean;
     errors: string[];
   }
+
+  interface ProjectFormData {
+    projectName: string;
+    description: string;
+    category: string;
+    location: string;
+    fundingGoal: number | string;
+    timeline: string;
+    [key: string]: unknown; // Allow other properties
+  }
   
-  export const validateProjectForm = (data: any): ValidationResult => {
+  
+  export const validateProjectForm = (data: ProjectFormData): string[] => {
     const errors: string[] = [];
   
     if (!data.projectName || data.projectName.trim().length < 3) {
@@ -14,26 +25,27 @@ export interface ValidationResult {
       errors.push('Description must be at least 10 characters long');
     }
   
-    if (!data.cropType) {
-      errors.push('Please select a crop type');
+    if (!data.category) {
+      errors.push('Please select a category');
     }
   
-    if (!data.fundingGoal || data.fundingGoal < 100) {
-      errors.push('Funding goal must be at least $100');
+    if (!data.location || data.location.trim().length < 2) {
+      errors.push('Please provide a valid location');
     }
   
-    if (data.expectedROI && (data.expectedROI < 0 || data.expectedROI > 100)) {
-      errors.push('Expected ROI must be between 0% and 100%');
+    const fundingGoal = typeof data.fundingGoal === 'string' 
+      ? parseFloat(data.fundingGoal) 
+      : data.fundingGoal;
+      
+    if (!fundingGoal || fundingGoal <= 0) {
+      errors.push('Funding goal must be greater than 0');
     }
   
-    if (data.farmSize && data.farmSize <= 0) {
-      errors.push('Farm size must be greater than 0');
+    if (!data.timeline || data.timeline.trim().length < 2) {
+      errors.push('Please provide a timeline');
     }
   
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
+    return errors;
   };
   
   export const validateWalletAddress = (address: string): boolean => {

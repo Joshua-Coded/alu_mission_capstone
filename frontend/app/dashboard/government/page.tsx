@@ -8,7 +8,7 @@ import RejectProjectModal from "@/components/dashboard/government/RejectProjectM
 import RevisionRequestModal from "@/components/dashboard/government/RevisionRequestModal";
 import RouteGuard from "@/components/RouteGuard";
 import WalletConnectionGuard from "@/components/WalletConnectionGuard";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
 import { Project as ApiProject, projectApi } from "@/lib/projectApi";
@@ -47,6 +47,26 @@ import {
   FiAlertCircle,
 } from 'react-icons/fi';
 
+interface DashboardStats {
+  totalProjects: number;
+  pendingReview: number;
+  underReview: number;
+  approved: number;
+  rejected: number;
+  needsRevision: number;
+  averageProcessingTime: string;
+  todaySubmissions: number;
+}
+
+interface StatusCount {
+  submitted: number;
+  under_review: number;
+  active: number;
+  rejected: number;
+  funded: number;
+  [key: string]: number;
+}
+
 export default function GovernmentDashboard() {
   const { user, logout, isAuthenticated } = useAuth();
   const { address } = useAccount();
@@ -67,17 +87,7 @@ export default function GovernmentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      loadDashboardData();
-    }
-  }, [isAuthenticated, user]);
-
-  useEffect(() => {
-    filterProjects();
-  }, [allProjects, activeTab, searchQuery, categoryFilter]);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError('');
@@ -106,9 +116,9 @@ export default function GovernmentDashboard() {
       
       console.log(`✅ Loaded ${projects.length} projects`);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Failed to load dashboard data:', error);
-      const errorMessage = error.message || 'Failed to load projects';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load projects';
       setError(errorMessage);
       toast({
         title: 'Error loading data',
@@ -119,9 +129,9 @@ export default function GovernmentDashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.role, toast]);
 
-  const filterProjects = () => {
+  const filterProjects = useCallback(() => {
     let filtered = [...allProjects];
 
     // Filter by tab (status)
@@ -163,18 +173,28 @@ export default function GovernmentDashboard() {
     }
 
     setFilteredProjects(filtered);
-  };
+  }, [allProjects, activeTab, searchQuery, categoryFilter, user?.department]);
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      loadDashboardData();
+    }
+  }, [isAuthenticated, user, loadDashboardData]);
+
+  useEffect(() => {
+    filterProjects();
+  }, [filterProjects]);
 
   const handleViewDetails = async (projectId: string) => {
     try {
       const apiProject = await projectApi.getProjectById(projectId);
       setSelectedProject(apiProject);
       setIsDetailsModalOpen(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error loading project details:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to load project details',
+        description: error instanceof Error ? error.message : 'Failed to load project details',
         status: 'error',
         duration: 3000,
       });
@@ -231,10 +251,10 @@ export default function GovernmentDashboard() {
       
       onApproveClose();
       setIsDetailsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Approval Failed',
-        description: error.message || 'Please try again',
+        description: error instanceof Error ? error.message : 'Please try again',
         status: 'error',
         duration: 3000,
       });
@@ -262,10 +282,10 @@ export default function GovernmentDashboard() {
       
       onRejectClose();
       setIsDetailsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Rejection Failed',
-        description: error.message || 'Please try again',
+        description: error instanceof Error ? error.message : 'Please try again',
         status: 'error',
         duration: 3000,
       });
@@ -296,18 +316,18 @@ export default function GovernmentDashboard() {
       
       onRevisionClose();
       setIsDetailsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Request Failed',
-        description: error.message || 'Please try again',
+        description: error instanceof Error ? error.message : 'Please try again',
         status: 'error',
         duration: 3000,
       });
     }
   };
 
-  const calculateStats = () => {
-    const statusCount = {
+  const calculateStats = (): DashboardStats => {
+    const statusCount: StatusCount = {
       submitted: 0,
       under_review: 0,
       active: 0,
@@ -344,7 +364,7 @@ export default function GovernmentDashboard() {
 
   const stats = calculateStats();
 
-  const getTabCount = (index: number) => {
+  const getTabCount = (index: number): number => {
     switch (index) {
       case 0: return allProjects.length;
       case 1: return stats.pendingReview;

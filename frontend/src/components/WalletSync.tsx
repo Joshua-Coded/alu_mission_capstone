@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 export default function WalletSync() {
   const { address, isConnected } = useAccount();
   const { user, isAuthenticated } = useAuth();
-  const [synced, setSynced] = useState(false);
+  const [, setSynced] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -29,11 +29,11 @@ export default function WalletSync() {
           const result = await api.syncWallet(address);
           console.log('✅ Wallet sync successful:', result);
           setSynced(true);
-        } catch (error: any) {
-          console.error('❌ Wallet sync failed:', error.message || error);
+        } catch (error: unknown) {
+          console.error('❌ Wallet sync failed:', error instanceof Error ? error.message : error);
           
           // Don't retry if wallet already exists
-          if (error.message?.includes('already registered')) {
+          if (error instanceof Error && error.message?.includes('already registered')) {
             console.log('⚠️ Wallet already registered to another account');
             setSynced(true);
           }

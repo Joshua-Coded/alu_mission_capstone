@@ -44,7 +44,7 @@ const features = [
 
 export default function LandingPage() {
   const router = useRouter();
-  const { isConnected } = useAccount();
+  useAccount();
 
   return (
     <Box>
@@ -85,7 +85,7 @@ export default function LandingPage() {
               maxW="4xl"
               lineHeight="shorter"
             >
-              Empowering Rwanda's Farmers Through{' '}
+            Empowering Rwanda&#39;s Farmers Through{' '}
               <Text as="span" color="brand.500">Transparent Investment</Text>
             </Heading>
             
@@ -222,7 +222,7 @@ export default function LandingPage() {
             </HStack>
             
             <Text textAlign="center" color="gray.400">
-              © 2024 RootRise. Empowering Rwanda's agricultural future through blockchain technology.
+              © 2024 RootRise. Empowering Rwanda&#39;s agricultural future through blockchain technology.
             </Text>
           </VStack>
         </Container>

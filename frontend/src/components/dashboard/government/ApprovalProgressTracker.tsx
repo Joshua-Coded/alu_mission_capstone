@@ -1,5 +1,5 @@
 import { FiCheckCircle, FiCircle, FiClock, FiXCircle } from "react-icons/fi";
-import { Project, ProjectStatus } from "@/lib/projectApi";
+import { Project } from "@/lib/projectApi";
 
 // ============================================
 // FILE: components/government/ApprovalProgressTracker.tsx
@@ -71,9 +71,9 @@ const getApprovalSteps = (project: Project) => {
 
   // If project is rejected, mark all steps after submission as failed
   if (project.status === 'rejected') {
-    return baseSteps.map((step, index) => ({
+    return baseSteps.map((step, _index) => ({
       ...step,
-      status: index === 0 ? 'completed' : 'failed'
+      status: _index === 0 ? 'completed' : 'failed'
     }));
   }
 
@@ -219,7 +219,7 @@ export default function ApprovalProgressTracker({ project }: ApprovalProgressTra
 
           {/* Step List */}
           <VStack spacing={3} align="stretch">
-            {approvalSteps.map((step, index) => (
+          {approvalSteps.map((step) => (
               <HStack key={step.id} spacing={4}>
                 <Icon
                   as={getStepIcon(step.status)}

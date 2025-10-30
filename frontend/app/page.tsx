@@ -60,7 +60,7 @@ const features = [
   {
     icon: FiGlobe,
     title: 'Global Impact',
-    description: 'Supporting Rwanda\'s agricultural growth through technology.',
+    description: 'Supporting Rwanda&apos;s agricultural growth through technology.',
     image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'
   },
 ];
@@ -132,7 +132,7 @@ export default function LandingPage() {
                 lineHeight="shorter"
                 textShadow="2px 2px 4px rgba(0,0,0,0.3)"
               >
-                Empowering Rwanda's Farmers Through{' '}
+                Empowering Rwanda&apos;s Farmers Through{' '}
                 <Text as="span" color="yellow.300">Transparent Investment</Text>
               </Heading>
               
@@ -273,7 +273,7 @@ export default function LandingPage() {
                       ))}
                     </HStack>
                     <Text fontSize="lg" fontStyle="italic" color="gray.700">
-                      "{testimonial.content}"
+                      &quot;{testimonial.content}&quot;
                     </Text>
                     <HStack>
                       <Image
@@ -353,7 +353,7 @@ export default function LandingPage() {
                   </Text>
                 </HStack>
                 <Text color="gray.400" lineHeight="tall">
-                  Empowering Rwanda's agricultural future through transparent, 
+                  Empowering Rwanda&apos;s agricultural future through transparent, 
                   blockchain-powered investment solutions.
                 </Text>
                 <HStack spacing={4}>
@@ -471,7 +471,7 @@ export default function LandingPage() {
             gap={4}
           >
             <Text color="gray.400" fontSize="sm">
-              © 2024 RootRise. All rights reserved. Built with ❤️ for Rwanda's agricultural community.
+              © 2024 RootRise. All rights reserved. Built with ❤️ for Rwanda&apos;s agricultural community.
             </Text>
             <HStack spacing={6} color="gray.400" fontSize="sm">
               <Link _hover={{ color: 'white' }}>Privacy Policy</Link>

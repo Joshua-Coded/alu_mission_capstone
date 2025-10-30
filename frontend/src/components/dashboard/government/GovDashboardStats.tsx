@@ -41,7 +41,7 @@ interface GovDashboardStatsProps {
 interface StatCardProps {
   label: string;
   value: number | string;
-  icon: any;
+  icon: React.ElementType;
   color: string;
   tooltip?: string;
   badge?: React.ReactNode;
@@ -267,7 +267,7 @@ export default function GovDashboardStats({
                 {todaySubmissions}
               </Text>
               <Text fontSize="sm" color="gray.600">
-                Today's Submissions
+                Today&#39;s Submissions
               </Text>
             </VStack>
 

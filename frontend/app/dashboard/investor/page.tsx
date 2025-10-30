@@ -5,13 +5,12 @@ import RouteGuard from "@/components/RouteGuard";
 import TopHeader from "@/components/dashboard/contributor/TopHeader";
 import WalletConnectionGuard from "@/components/WalletConnectionGuard";
 import WalletSync from "@/components/WalletSync";
-import contributionApi from "@/lib/contributionApi";
+import contributionApi, { Contribution } from "@/lib/contributionApi";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FiDollarSign, FiHeart, FiRefreshCw, FiTrendingUp, FiUsers } from "react-icons/fi";
-import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
-import { projectApi } from "@/lib/projectApi";
+import { Project as ApiProject, projectApi } from "@/lib/projectApi";
 
 import {
   Box,
@@ -34,7 +33,6 @@ import {
   useToast,
   Spinner,
   HStack,
-  Link,
 } from '@chakra-ui/react';
 
 interface DashboardStats {
@@ -47,14 +45,17 @@ interface DashboardStats {
   averageContribution: number;
 }
 
+// ✅ Use the imported Project type instead of local interface
+type Project = ApiProject;
+
 export default function InvestorDashboard() {
   const { user, logout } = useAuth();
-  const { address } = useAccount();
   const router = useRouter();
   const toast = useToast();
+  const recentItemBg = useColorModeValue('gray.50', 'gray.700');
+  const recentItemHoverBg = useColorModeValue('gray.100', 'gray.600');
   
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
 
@@ -67,10 +68,9 @@ export default function InvestorDashboard() {
     pendingContributions: 0,
     averageContribution: 0,
   });
-  
 
-  const [recentProjects, setRecentProjects] = useState<any[]>([]);
-  const [recentContributions, setRecentContributions] = useState<any[]>([]);
+  const [recentProjects, setRecentProjects] = useState<Project[]>([]);
+  const [recentContributions, setRecentContributions] = useState<Contribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -78,11 +78,48 @@ export default function InvestorDashboard() {
     setSidebarCollapsed(!sidebarCollapsed);
   };
 
-  useEffect(() => {
-    fetchDashboardData();
+  const fetchContributionsDirectly = useCallback(async (): Promise<void> => {
+    try {
+      console.log('🔄 Trying alternative: Loading all contributions...');
+      const contributionsResult = await contributionApi.getMyContributions(1, 100);
+      
+      console.log('📊 All Contributions Response:', contributionsResult);
+      
+      if (contributionsResult.success && contributionsResult.data) {
+        const contributions = contributionsResult.data.contributions || [];
+        const totalMatic = contributions.reduce((sum: number, contribution: Contribution) => {
+          return sum + (contribution.amountMatic || contribution.amount || 0);
+        }, 0);
+        
+        const uniqueProjects = new Set(contributions.map((c: Contribution) => c.project?._id)).size;
+        const confirmedContributions = contributions.filter((c: Contribution) => c.status === 'confirmed').length;
+        const pendingContributions = contributions.filter((c: Contribution) => c.status === 'pending').length;
+        
+        console.log('💰 Calculated totals:', {
+          totalMatic,
+          totalContributions: contributions.length,
+          uniqueProjects,
+          confirmedContributions,
+          pendingContributions
+        });
+        
+        if (totalMatic > 0) {
+          setStats(prev => ({
+            ...prev,
+            totalAmountMatic: totalMatic,
+            totalContributions: contributions.length,
+            projectsSupported: uniqueProjects,
+            confirmedContributions,
+            pendingContributions,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('❌ Alternative approach failed:', error);
+    }
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       console.log('🔄 Fetching dashboard data...');
@@ -111,8 +148,9 @@ export default function InvestorDashboard() {
         } else {
           console.log('❌ No stats data in response');
         }
-      } catch (err: any) {
-        console.log('❌ Stats API error:', err.message);
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.log('❌ Stats API error:', error.message);
       }
 
       // If stats are still 0, try fetching contributions directly
@@ -131,11 +169,11 @@ export default function InvestorDashboard() {
           
           // If we still don't have stats, calculate from contributions
           if (stats.totalAmountMatic === 0 && contributions.length > 0) {
-            const totalMatic = contributions.reduce((sum: number, contribution: any) => {
+            const totalMatic = contributions.reduce((sum: number, contribution: Contribution) => {
               return sum + (contribution.amountMatic || contribution.amount || 0);
             }, 0);
             
-            const uniqueProjects = new Set(contributions.map((c: any) => c.project?._id)).size;
+            const uniqueProjects = new Set(contributions.map((c: Contribution) => c.project?._id)).size;
             
             console.log('💰 Calculated from contributions:', {
               totalMatic,
@@ -151,14 +189,15 @@ export default function InvestorDashboard() {
             }));
           }
         }
-      } catch (err: any) {
-        console.log('❌ Could not fetch recent contributions:', err.message);
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.log('❌ Could not fetch recent contributions:', error.message);
       }
       
-      // Fetch projects
+      // Fetch projects - FIXED: Using correct Project type
       try {
         const projects = await projectApi.getVerifiedProjects();
-        const activeProjects = projects.filter((p: any) => p.status === 'active');
+        const activeProjects = projects.filter((p: Project) => p.status === 'active');
         
         setStats(prev => ({
           ...prev,
@@ -166,12 +205,14 @@ export default function InvestorDashboard() {
         }));
         
         setRecentProjects(activeProjects.slice(0, 6));
-      } catch (err: any) {
-        console.log('❌ Could not fetch projects:', err.message);
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.log('❌ Could not fetch projects:', error.message);
         setRecentProjects([]);
       }
-    } catch (err: any) {
-      console.error('❌ Error loading dashboard:', err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      console.error('❌ Error loading dashboard:', error);
       toast({
         title: 'Error Loading Dashboard',
         description: 'Some data could not be loaded. Please try again later.',
@@ -183,50 +224,13 @@ export default function InvestorDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [fetchContributionsDirectly, stats.totalAmountMatic, toast]);
 
-  const fetchContributionsDirectly = async () => {
-    try {
-      console.log('🔄 Trying alternative: Loading all contributions...');
-      const contributionsResult = await contributionApi.getMyContributions(1, 100);
-      
-      console.log('📊 All Contributions Response:', contributionsResult);
-      
-      if (contributionsResult.success && contributionsResult.data) {
-        const contributions = contributionsResult.data.contributions || [];
-        const totalMatic = contributions.reduce((sum: number, contribution: any) => {
-          return sum + (contribution.amountMatic || contribution.amount || 0);
-        }, 0);
-        
-        const uniqueProjects = new Set(contributions.map((c: any) => c.project?._id)).size;
-        const confirmedContributions = contributions.filter((c: any) => c.status === 'confirmed').length;
-        const pendingContributions = contributions.filter((c: any) => c.status === 'pending').length;
-        
-        console.log('💰 Calculated totals:', {
-          totalMatic,
-          totalContributions: contributions.length,
-          uniqueProjects,
-          confirmedContributions,
-          pendingContributions
-        });
-        
-        if (totalMatic > 0) {
-          setStats(prev => ({
-            ...prev,
-            totalAmountMatic: totalMatic,
-            totalContributions: contributions.length,
-            projectsSupported: uniqueProjects,
-            confirmedContributions,
-            pendingContributions,
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('❌ Alternative approach failed:', error);
-    }
-  };
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (): Promise<void> => {
     setRefreshing(true);
     await fetchDashboardData();
     toast({
@@ -237,7 +241,7 @@ export default function InvestorDashboard() {
     });
   };
 
-  const formatMatic = (amount: number | undefined) => {
+  const formatMatic = (amount: number | undefined): string => {
     if (amount === undefined || amount === null || isNaN(amount)) {
       return '0.0000';
     }
@@ -246,23 +250,26 @@ export default function InvestorDashboard() {
     return amount.toFixed(4);
   };
 
-  const formatCompactNumber = (num: number) => {
+  const formatCompactNumber = (num: number): string => {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'K';
     }
     return num.toString();
   };
 
-  const handleViewProject = (project: any) => {
+  const handleViewProject = (project: Project): void => {
     router.push(`/projects/${project._id}`);
   };
 
-  const getProgressPercentage = () => {
+  const getProgressPercentage = (): number => {
     if (stats.totalContributions === 0) return 0;
     const total = stats.confirmedContributions + stats.pendingContributions;
     if (total === 0) return 0;
     return (stats.confirmedContributions / total) * 100;
   };
+
+  // Move hook call outside of callback
+  const recentItemInnerBg = useColorModeValue('gray.50', 'gray.700');
 
   return (
     <RouteGuard allowedRoles={['INVESTOR']}>
@@ -272,7 +279,7 @@ export default function InvestorDashboard() {
       >
         <WalletSync />
         
-        <Box minH="100vh" bg={bgColor}>
+        <Box minH="100vh" bg={recentItemBg}>
           <ContributorSidebar 
             isCollapsed={sidebarCollapsed}
             user={user}
@@ -306,7 +313,7 @@ export default function InvestorDashboard() {
                   <Flex justify="space-between" align="center">
                     <Box>
                       <Heading size="lg" mb={2}>Welcome back, {user?.firstName}! 👋</Heading>
-                      <Text color="gray.600">Here's an overview of your investment portfolio</Text>
+                      <Text color="gray.600">Here&apos;s an overview of your investment portfolio</Text>
                     </Box>
                     <Button
                       leftIcon={<Icon as={FiRefreshCw} />}
@@ -525,9 +532,9 @@ export default function InvestorDashboard() {
                               justify="space-between"
                               align="center"
                               p={4}
-                              bg={useColorModeValue('gray.50', 'gray.700')}
+                              bg={recentItemInnerBg}
                               borderRadius="lg"
-                              _hover={{ bg: useColorModeValue('gray.100', 'gray.600') }}
+                              _hover={{ bg: recentItemHoverBg }}
                               transition="all 0.2s"
                               cursor="pointer"
                               onClick={() => router.push(`/projects/${contribution.project._id}`)}
@@ -543,7 +550,7 @@ export default function InvestorDashboard() {
                                   <Text fontSize="sm" color="purple.500" fontWeight="bold">MATIC</Text>
                                 </HStack>
                                 <Text fontSize="xs" color="gray.500">
-                                  {new Date(contribution.contributedAt || contribution.createdAt).toLocaleDateString('en-US', {
+                                  {new Date(contribution.contributedAt || contribution.createdAt || '').toLocaleDateString('en-US', {
                                     year: 'numeric',
                                     month: 'long',
                                     day: 'numeric',

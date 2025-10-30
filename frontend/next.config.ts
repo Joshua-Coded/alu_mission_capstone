@@ -6,102 +6,20 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 
 const nextConfig = {
   reactStrictMode: false,
-  swcMinify: true,
   productionBrowserSourceMaps: false,
 
-  // Webpack optimizations
-  webpack: (config: { resolve: { fallback: any; }; plugins: any[]; optimization: any; }, { isServer, webpack }: any) => {
-    // Fix pino-pretty missing module warning
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-        crypto: false,
-        stream: false,
-        http: false,
-        https: false,
-        zlib: false,
-        path: false,
-        os: false,
-        'pino-pretty': false,
-      };
-    }
-
-    // Ignore optional dependencies
-    config.plugins.push(
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^(pino-pretty|encoding|bufferutil|utf-8-validate)$/,
-      })
-    );
-
-    // Optimize bundle splitting
-    config.optimization = {
-      ...config.optimization,
-      moduleIds: 'deterministic',
-      runtimeChunk: 'single',
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          default: false,
-          vendors: false,
-          
-          // Framework
-          framework: {
-            name: 'framework',
-            test: /[\\/]node_modules[\\/](react|react-dom|scheduler|next)[\\/]/,
-            priority: 40,
-            enforce: true,
-          },
-          
-          // Web3
-          web3: {
-            name: 'web3',
-            test: /[\\/]node_modules[\\/](wagmi|@wagmi|@rainbow-me|viem|@walletconnect|@tanstack)[\\/]/,
-            priority: 30,
-            reuseExistingChunk: true,
-          },
-          
-          // Chakra UI
-          chakra: {
-            name: 'chakra',
-            test: /[\\/]node_modules[\\/](@chakra-ui|@emotion)[\\/]/,
-            priority: 25,
-            reuseExistingChunk: true,
-          },
-          
-          // UI libraries
-          ui: {
-            name: 'ui',
-            test: /[\\/]node_modules[\\/](framer-motion|lucide-react|react-icons)[\\/]/,
-            priority: 20,
-            reuseExistingChunk: true,
-          },
-          
-          // Utilities
-          lib: {
-            name: 'lib',
-            test: /[\\/]node_modules[\\/](axios|date-fns|formik|react-hook-form|yup)[\\/]/,
-            priority: 15,
-            reuseExistingChunk: true,
-          },
-          
-          // Commons
-          commons: {
-            name: 'commons',
-            minChunks: 2,
-            priority: 10,
-            reuseExistingChunk: true,
-          },
+  
+  experimental: {
+    turbo: {
+      rules: {
+        '*.js': {
+          browser: true,
         },
       },
-    };
-
-    return config;
+    },
   },
 
-  // Image optimization
+  // Image optimization (works with Turbopack)
   images: {
     domains: [
       'images.unsplash.com',
@@ -111,7 +29,7 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
 
-  // Compiler optimizations
+  // Compiler optimizations (works with Turbopack)
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
@@ -119,7 +37,7 @@ const nextConfig = {
     emotion: true,
   },
 
-  // Headers (keeping your existing CSP + adding optimizations)
+  // Headers (works with Turbopack)
   async headers() {
     return [
       {
@@ -154,7 +72,6 @@ const nextConfig = {
           },
         ],
       },
-      // Cache static assets
       {
         source: '/static/:path*',
         headers: [

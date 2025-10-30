@@ -32,7 +32,6 @@ import {
   Badge,
   InputGroup,
   InputRightElement,
-  IconButton,
 } from '@chakra-ui/react';
 
 interface ShareProjectModalProps {
@@ -73,7 +72,7 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
       });
       
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
+    } catch {
       toast({
         title: "Copy Failed",
         description: "Please copy the link manually",
@@ -160,8 +159,14 @@ export const ShareProjectModal: React.FC<ShareProjectModalProps> = ({
           status: "success",
           duration: 2000,
         });
-      } catch (error) {
-        console.log('Share cancelled');
+      } catch {
+        toast({
+          title: "Copy Failed",
+          description: "Please copy the link manually",
+          status: "error",
+          duration: 2000,
+          isClosable: true,
+        });
       }
     }
   };

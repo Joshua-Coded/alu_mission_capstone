@@ -14,7 +14,6 @@ import {
   Code,
   Collapse,
   Icon,
-  useColorModeValue,
 } from '@chakra-ui/react';
 
 interface Props {
@@ -111,8 +110,8 @@ class ErrorBoundary extends Component<Props, State> {
                     Oops! Something went wrong
                   </AlertTitle>
                   <AlertDescription fontSize="md">
-                    We encountered an unexpected error while loading this section of the dashboard.
-                    Don't worry, your data is safe!
+                        We encountered an unexpected error while loading this section of the dashboard.
+                        Don&apos;t worry, your data is safe!
                   </AlertDescription>
                 </Box>
               </HStack>
@@ -216,7 +215,7 @@ class ErrorBoundary extends Component<Props, State> {
                 <AlertTitle fontSize="md">What you can do:</AlertTitle>
                 <AlertDescription>
                   <VStack align="start" spacing={1} mt={2}>
-                    <Text fontSize="sm">• Click "Try Again" to reload this section</Text>
+                    <Text fontSize="sm">• Click &quot;Try Again&quot; to reload this section</Text>
                     <Text fontSize="sm">• Refresh your browser page</Text>
                     <Text fontSize="sm">• Check your internet connection</Text>
                     <Text fontSize="sm">• Contact support if the problem persists</Text>
@@ -232,10 +231,10 @@ class ErrorBoundary extends Component<Props, State> {
                 <Box>
                   <AlertTitle fontSize="sm">Development Mode</AlertTitle>
                   <AlertDescription fontSize="xs">
-                    This detailed error view is only visible in development. 
-                    In production, users will see a simpler error message.
-                  </AlertDescription>
-                </Box>
+                  This detailed error view is only visible in development. 
+                  In production, users will see a simpler error message.
+                </AlertDescription>
+               </Box>
               </Alert>
             )}
           </VStack>

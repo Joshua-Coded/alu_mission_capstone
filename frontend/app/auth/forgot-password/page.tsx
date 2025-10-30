@@ -56,7 +56,7 @@ export default function ForgotPasswordPage() {
         setIsSubmitted(true);
         toast({
           title: "Reset Email Sent",
-          description: `If an account with ${values.email} exists, you'll receive password reset instructions.`,
+          description: `If an account with ${values.email} exists, you&apos;ll receive password reset instructions.`,
           status: "success",
           duration: 5000,
           isClosable: true,
@@ -104,12 +104,12 @@ export default function ForgotPasswordPage() {
               <VStack spacing={3}>
                 <Text color="gray.600" fontSize="md" lineHeight="tall">
                   If an account with <strong>{formik.values.email}</strong> exists, 
-                  you'll receive password reset instructions shortly.
+                  you&apos;ll receive password reset instructions shortly.
                 </Text>
                 <Alert status="info" borderRadius="md">
                   <AlertIcon />
                   <AlertDescription fontSize="sm">
-                    Check your spam folder if you don't see the email within a few minutes.
+                    Check your spam folder if you don&apos;t see the email within a few minutes.
                   </AlertDescription>
                 </Alert>
               </VStack>
@@ -164,7 +164,7 @@ export default function ForgotPasswordPage() {
                 Reset Your Password
               </Heading>
               <Text color="gray.600" fontSize="md">
-                Enter your email address and we'll send you a link to reset your password.
+                Enter your email address and we&apos;ll send you a link to reset your password.
               </Text>
             </VStack>
 
@@ -243,7 +243,7 @@ export default function ForgotPasswordPage() {
             <Alert status="info" borderRadius="md">
               <AlertIcon />
               <AlertDescription fontSize="sm">
-                For security reasons, we'll send reset instructions only if an account with this email exists.
+                For security reasons, we&apos;ll send reset instructions only if an account with this email exists.
               </AlertDescription>
             </Alert>
           </VStack>

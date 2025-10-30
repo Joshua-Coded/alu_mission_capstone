@@ -17,7 +17,6 @@ import {
   Tooltip,
   Spinner,
   useToast,
-  Progress,
   SimpleGrid,
 } from '@chakra-ui/react';
 import { 
@@ -33,7 +32,12 @@ import {
 
 interface ContributorSidebarProps {
   isCollapsed: boolean;
-  user: any;
+  user: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    profileImage?: string;
+  } | null;
 }
 
 const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, user }) => {
@@ -47,6 +51,11 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
   const activeBg = useColorModeValue('green.50', 'green.900');
   const activeColor = useColorModeValue('green.600', 'green.200');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
+  const statsBg = useColorModeValue('gray.50', 'gray.900');
+  const emptyStateBg = useColorModeValue('green.50', 'green.900');
+  const emptyStateBorder = useColorModeValue('green.200', 'green.700');
+  const cardBg = useColorModeValue('white', 'gray.800');
+  const collapsedStatsBg = useColorModeValue('purple.50', 'purple.900');
 
   const [stats, setStats] = useState({
     totalContributions: 0,
@@ -59,7 +68,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
     error: false,
   });
 
-  // ✅ FIXED: Load stats using the new API client
+  // Load stats using the new API client
   useEffect(() => {
     const loadStats = async () => {
       try {
@@ -106,8 +115,9 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
             error: false,
           });
         }
-      } catch (error: any) {
-        console.error('❌ Failed to load sidebar stats:', error);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to load sidebar stats';
+        console.error('❌ Failed to load sidebar stats:', errorMessage);
         setStats({ 
           totalContributions: 0, 
           totalAmountMatic: 0,
@@ -118,9 +128,9 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
           loading: false,
           error: true
         });
-        
+      
         // Only show error toast for actual errors, not for "no contributions" case
-        if (error.message && !error.message.includes('No contributions')) {
+        if (errorMessage && !errorMessage.includes('No contributions')) {
           toast({
             title: 'Failed to load stats',
             description: 'Could not load your contribution statistics',
@@ -146,11 +156,17 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
         
         if (contributionsResult.success && contributionsResult.data) {
           const contributions = contributionsResult.data.contributions || [];
-          const totalMatic = contributions.reduce((sum: number, contribution: any) => {
+          const totalMatic = contributions.reduce((sum: number, contribution: {
+            amountMatic?: number;
+            amount?: number;
+            project?: { _id: string };
+          }) => {
             return sum + (contribution.amountMatic || contribution.amount || 0);
-          }, 0);
+          }, 0);          
           
-          const uniqueProjects = new Set(contributions.map((c: any) => c.project?._id)).size;
+          const uniqueProjects = new Set(contributions.map((c: {
+            project?: { _id: string };
+          }) => c.project?._id)).size;          
           
           console.log('💰 Calculated from contributions:', {
             totalContributions: contributions.length,
@@ -220,7 +236,15 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
     },
   ];
 
-  const NavItem = ({ item }: { item: any }) => {
+  const NavItem = ({ item }: { 
+    item: {
+      label: string;
+      icon: React.ElementType;
+      href: string;
+      isActive: boolean;
+      badge?: number;
+    } 
+  }) => {  
     return (
       <Tooltip 
         label={isCollapsed ? item.label : ''} 
@@ -309,16 +333,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
       return (num / 1000).toFixed(1) + 'K';
     }
     return num.toString();
-  };
-
-  const getProgressPercentage = () => {
-    if (stats.totalContributions === 0) return 0;
-    const total = stats.confirmedContributions + stats.pendingContributions;
-    if (total === 0) return 0;
-    return (stats.confirmedContributions / total) * 100;
-  };
-
-  
+  };  
 
   return (
     <Box
@@ -395,14 +410,12 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
             p={4} 
             borderTop="1px" 
             borderColor={borderColor} 
-            bg={useColorModeValue('gray.50', 'gray.900')}
+            bg={statsBg}
           >
             <VStack spacing={3} align="stretch">
               <Text fontSize="xs" fontWeight="bold" color="gray.400" textTransform="uppercase" letterSpacing="wide">
                 Investment Stats
               </Text>
-              
-           
               
               {stats.loading ? (
                 <HStack justify="center" py={2}>
@@ -415,11 +428,11 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
                 </Text>
               ) : stats.totalContributions === 0 ? (
                 <Box 
-                  bg={useColorModeValue('green.50', 'green.900')} 
+                  bg={emptyStateBg}
                   p={3} 
                   borderRadius="md"
                   borderWidth="1px"
-                  borderColor="green.200"
+                  borderColor={emptyStateBorder}
                   textAlign="center"
                 >
                   <Icon as={FiTrendingUp} color="green.500" boxSize={5} mb={2} mx="auto" />
@@ -434,7 +447,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
                 <>
                   {/* Total Invested Card */}
                   <Box 
-                    bg={useColorModeValue('white', 'gray.800')} 
+                    bg={cardBg}
                     p={3} 
                     borderRadius="md"
                     borderWidth="1px"
@@ -474,7 +487,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
                   {/* Quick Stats */}
                   <SimpleGrid columns={2} spacing={2}>
                     <Box 
-                      bg={useColorModeValue('white', 'gray.800')}
+                      bg={cardBg}
                       p={2}
                       borderRadius="md"
                       borderWidth="1px"
@@ -489,7 +502,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
                     </Box>
                     
                     <Box 
-                      bg={useColorModeValue('white', 'gray.800')}
+                      bg={cardBg}
                       p={2}
                       borderRadius="md"
                       borderWidth="1px"
@@ -503,8 +516,6 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
                       <Text fontSize="2xs" color="gray.500">Projects</Text>
                     </Box>
                   </SimpleGrid>
-
-                 
                 </>
               )}
             </VStack>
@@ -537,7 +548,7 @@ const ContributorSidebar: React.FC<ContributorSidebarProps> = ({ isCollapsed, us
               p={2} 
               borderTop="1px" 
               borderColor={borderColor}
-              bg={useColorModeValue('purple.50', 'purple.900')}
+              bg={collapsedStatsBg}
               textAlign="center"
               cursor="pointer"
             >

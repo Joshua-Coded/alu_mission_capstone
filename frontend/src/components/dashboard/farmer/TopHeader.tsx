@@ -3,6 +3,7 @@ import NextLink from "next/link";
 import React from "react";
 import { useSearchParams } from "next/navigation";
 import { useAccount, useBalance, useDisconnect } from "wagmi";
+import { User } from '@/types';
 
 import {
   Box,
@@ -45,7 +46,7 @@ import {
 } from 'react-icons/fi';
 
 interface TopHeaderProps {
-  user: any;
+  user: User | null;
   onLogout: () => void;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
@@ -63,11 +64,13 @@ const TopHeader: React.FC<TopHeaderProps> = ({
   const { data: balance } = useBalance({ address });
   const toast = useToast();
   
+  // Move all useColorModeValue hooks to the top-level (before any returns or conditionals)
   const bg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const textColor = useColorModeValue('gray.800', 'gray.100');
   const mutedTextColor = useColorModeValue('gray.600', 'gray.400');
   const subtleTextColor = useColorModeValue('gray.500', 'gray.400');
+  const addressBg = useColorModeValue('gray.50', 'gray.700');
   
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
@@ -270,7 +273,7 @@ const TopHeader: React.FC<TopHeaderProps> = ({
                         <Text 
                           fontSize="xs" 
                           fontFamily="mono" 
-                          bg={useColorModeValue('gray.50', 'gray.700')}
+                          bg={addressBg}
                           px={2}
                           py={1}
                           borderRadius="md"

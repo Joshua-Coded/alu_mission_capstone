@@ -65,18 +65,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
 }) => {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const badgeBg = useColorModeValue('white', 'gray.800');
+  const titleColor = useColorModeValue('gray.800', 'white');
+  const progressBg = useColorModeValue('gray.100', 'gray.700');
+  // removed progressColor if unused
   
   const [blockchainData, setBlockchainData] = useState<BlockchainData | null>(null);
   const [loadingBlockchain, setLoadingBlockchain] = useState(false);
 
-  // Fetch live blockchain data if project is on-chain
-  useEffect(() => {
-    if (project.blockchainProjectId !== null && project.blockchainProjectId !== undefined) {
-      fetchBlockchainData();
-    }
-  }, [project._id]);
-
-  const fetchBlockchainData = async () => {
+  const fetchBlockchainData = React.useCallback(async () => {
     try {
       setLoadingBlockchain(true);
       const token = localStorage.getItem('authToken');
@@ -100,13 +97,20 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         isFullyFunded: response.data.isFullyFunded,
         contributorCount: response.data.contributorCount,
       });
-    } catch (error: any) {
-      console.error('Failed to fetch blockchain data:', error.message);
-      // Don't throw the error - just log it
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch blockchain data';
+      console.error('Failed to fetch blockchain data:', message);
     } finally {
       setLoadingBlockchain(false);
     }
-  };
+  }, [project._id]);
+
+  // Fetch live blockchain data if project is on-chain
+  useEffect(() => {
+    if (project.blockchainProjectId !== null && project.blockchainProjectId !== undefined) {
+      fetchBlockchainData();
+    }
+  }, [fetchBlockchainData, project.blockchainProjectId]);
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       submitted: 'orange',
@@ -142,7 +146,7 @@ useEffect(() => {
 }, []);
 
   const getStatusIcon = (status: string) => {
-    const icons: Record<string, any> = {
+    const icons: Record<string, React.ElementType> = {
       submitted: FiClock,
       under_review: FiClock,
       active: FiCheckCircle,
@@ -240,7 +244,7 @@ useEffect(() => {
           alignItems="center"
           gap={1}
           boxShadow="md"
-          bg={useColorModeValue('white', 'gray.800')}
+          bg={badgeBg}
           fontWeight="bold"
         >
           <Icon 
@@ -265,7 +269,7 @@ useEffect(() => {
               alignItems="center"
               gap={1}
               boxShadow="md"
-              bg={useColorModeValue('white', 'gray.800')}
+              bg={badgeBg}
               cursor="pointer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -293,7 +297,7 @@ useEffect(() => {
             py={1}
             borderRadius="full"
             boxShadow="md"
-            bg={useColorModeValue('white', 'gray.800')}
+            bg={badgeBg}
           >
             {blockchainData.contributorCount} {blockchainData.contributorCount === 1 ? 'Contributor' : 'Contributors'}
           </Badge>
@@ -310,7 +314,7 @@ useEffect(() => {
                 fontWeight="bold"
                 noOfLines={2}
                 lineHeight="1.3"
-                color={useColorModeValue('gray.800', 'white')}
+                color={titleColor}
               >
                 {project.title}
               </Text>
@@ -406,7 +410,7 @@ useEffect(() => {
               size="sm"
               colorScheme={isFullyFunded ? 'purple' : 'green'}
               borderRadius="full"
-              bg={useColorModeValue('gray.100', 'gray.700')}
+              bg={progressBg}
               hasStripe={!isFullyFunded}
               isAnimated={!isFullyFunded}
             />

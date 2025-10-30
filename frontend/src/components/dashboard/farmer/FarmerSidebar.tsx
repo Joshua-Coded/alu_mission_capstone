@@ -11,7 +11,6 @@ import {
   Button,
   Icon,
   useColorModeValue,
-  Divider,
   Badge,
   Avatar,
   Tooltip,
@@ -24,9 +23,22 @@ import {
   FiPackage,
 } from 'react-icons/fi';
 
+interface User {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  profileImage?: string;
+}
+
 interface SidebarProps {
   isCollapsed: boolean;
-  user: any;
+  user: User | null;
+}
+
+interface Stats {
+  activeProjects: number;
+  totalFunding: number;
+  loading: boolean;
 }
 
 const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
@@ -39,8 +51,9 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
   const activeBg = useColorModeValue('green.50', 'green.900');
   const activeColor = useColorModeValue('green.600', 'green.200');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
+  const bottomBg = useColorModeValue('gray.50', 'gray.900');
 
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     activeProjects: 0,
     totalFunding: 0,
     loading: true,
@@ -57,18 +70,20 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
         });
         
         if (response.ok) {
-          const projects = await response.json();
-          const activeCount = projects.filter((p: any) => p.status === 'active').length;
-          const totalFunding = projects.reduce((sum: number, p: any) => sum + (p.currentFunding || 0), 0);
+          const projects: Array<{ status?: string; currentFunding?: number }> = await response.json();
+          const activeCount = projects.filter((p) => p.status === 'active').length;
+          const totalFunding = projects.reduce((sum, p) => sum + (p.currentFunding || 0), 0);
           
           setStats({
             activeProjects: activeCount,
             totalFunding,
             loading: false,
           });
+        } else {
+          setStats({ activeProjects: 0, totalFunding: 0, loading: false });
         }
-      } catch (error) {
-        console.error('Failed to load sidebar stats:', error);
+      } catch {
+        console.error('Failed to load sidebar stats');
         setStats({ activeProjects: 0, totalFunding: 0, loading: false });
       }
     };
@@ -103,7 +118,7 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
     },
   ];
 
-  const NavItem = ({ item }: { item: any }) => {
+  const NavItem = ({ item }: { item: { label: string; icon: React.ElementType; href: string; isActive: boolean; } }) => {
     return (
       <Tooltip 
         label={isCollapsed ? item.label : ''} 
@@ -218,7 +233,7 @@ const FarmerSidebar: React.FC<SidebarProps> = ({ isCollapsed, user }) => {
 
         {/* Bottom Stats (when not collapsed) */}
         {!isCollapsed && (
-          <Box p={4} borderTop="1px" borderColor={borderColor} bg={useColorModeValue('gray.50', 'gray.900')}>
+          <Box p={4} borderTop="1px" borderColor={borderColor} bg={bottomBg}>
             <VStack spacing={3}>
               <Text fontSize="xs" fontWeight="bold" color="gray.400" w="full" textAlign="left">
                 QUICK STATS

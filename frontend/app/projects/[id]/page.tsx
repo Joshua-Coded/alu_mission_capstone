@@ -5,8 +5,9 @@ import RouteGuard from "@/components/RouteGuard";
 import contributionApi from "@/lib/contributionApi";
 import { Flex, useDisclosure } from "@chakra-ui/react";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { projectApi } from "@/lib/projectApi";
+import { useCallback, useEffect, useState } from "react";
+import { Contribution } from "@/lib/contributionApi";
+import { projectApi, type Project } from "@/lib/projectApi";
 
 import {
   Box,
@@ -49,60 +50,139 @@ import {
   FiRefreshCw,
 } from 'react-icons/fi';
 
+// Create a separate component for ContributionCard to fix hook-in-callback error
+const ContributionCard = ({ contribution, index }: { contribution: Contribution; index: number }) => {
+  const cardBg = useColorModeValue('gray.50', 'gray.700');
+  
+  // Safely extract data with fallbacks
+  const contributorName = contribution.contributor 
+    ? `${contribution.contributor.firstName || ''} ${contribution.contributor.lastName || ''}`.trim()
+    : contribution.contributor || 'Anonymous Contributor';
+  
+  const amount = contribution.amountMatic || contribution.amount || 0;
+  const date = contribution.contributedAt || contribution.createdAt;
+
+  
+  // Safe date formatting
+  let formattedDate = 'Invalid Date';
+  try {
+    if (date) {
+      const validDate = new Date(date);
+      if (!isNaN(validDate.getTime())) {
+        formattedDate = validDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Date formatting error:', error);
+  }
+
+  const formatMatic = (amount: string | number) => {
+    if (typeof amount === 'string' && amount.includes('.')) {
+      return amount;
+    }
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(num)) return '0.0000';
+    return num.toFixed(4);
+  };
+
+  return (
+    <Card key={contribution._id || index} bg={cardBg}>
+      <CardBody>
+        <Flex justify="space-between" align="center">
+          <HStack spacing={3}>
+            <Box
+              w={10}
+              h={10}
+              bg="purple.100"
+              borderRadius="full"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              fontWeight="bold"
+              color="purple.600"
+            >
+              {index + 1}
+            </Box>
+            <VStack align="start" spacing={0}>
+              <Text fontWeight="bold">
+                {contributorName || 'Anonymous'}
+              </Text>
+              <Text fontSize="sm" color="gray.600">
+                {formattedDate}
+              </Text>
+              {contribution.transactionHash && (
+                <Text fontSize="xs" color="blue.600" fontFamily="mono">
+                  TX: {contribution.transactionHash.slice(0, 10)}...
+                </Text>
+              )}
+            </VStack>
+          </HStack>
+          <VStack align="end" spacing={0}>
+            <HStack>
+              <Text fontWeight="bold" color="purple.600">
+                {formatMatic(amount)}
+              </Text>
+              <Text fontWeight="bold" color="purple.500">MATIC</Text>
+            </HStack>
+            <Badge 
+              colorScheme={
+                contribution.status === 'confirmed' ? 'green' : 
+                contribution.status === 'pending' ? 'yellow' : 'gray'
+              } 
+              fontSize="xs"
+            >
+              {contribution.status ? contribution.status.charAt(0).toUpperCase() + contribution.status.slice(1) : 'Confirmed'}
+            </Badge>
+          </VStack>
+        </Flex>
+      </CardBody>
+    </Card>
+  );
+};
+
 export default function ProjectDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const toast = useToast();
   
-  const [project, setProject] = useState<any>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [blockchainData, setBlockchainData] = useState<any>(null);
+  
+  interface BlockchainData extends Record<string, unknown> {
+    currentFunding: string;
+    fundingGoal: string;
+    isFullyFunded: boolean;
+    isActive: boolean;
+    contractAddress: string;
+    farmerWalletAddress: string;
+    blockchainProjectId: number;
+    lastUpdated: string;
+  }
+  const [blockchainData, setBlockchainData] = useState<BlockchainData | null>(null);
   const [loadingBlockchain, setLoadingBlockchain] = useState(false);
-  const [contributions, setContributions] = useState<any[]>([]);
+  const [contributions, setContributions] = useState<Contribution[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   
   const { isOpen, onOpen, onClose } = useDisclosure();
 
+  // Move ALL useColorModeValue hooks to the top - unconditionally
   const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const overviewCardBg = useColorModeValue('gray.50', 'gray.700');
+  const blockchainCardBg = useColorModeValue('purple.50', 'purple.900');
+  const farmerCardBg = useColorModeValue('green.50', 'green.900');
+  const fundingCardBg = useColorModeValue('blue.50', 'blue.900');
 
-  useEffect(() => {
-    if (params.id) {
-      fetchProject(params.id as string);
-      checkIfFavorite(params.id as string);
-    }
-  }, [params.id]);
-
-  const fetchProject = async (id: string) => {
-    try {
-      setLoading(true);
-      const data = await projectApi.getProjectById(id);
-      setProject(data);
-      
-      // Fetch blockchain data if project is on-chain
-      if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
-        await fetchBlockchainData(id);
-        await fetchContributions(id);
-      }
-      
-      // Update last updated timestamp
-      setLastUpdated(new Date().toISOString());
-    } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to load project',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchBlockchainData = async (projectId: string) => {
+  // Fix: Wrap all functions in useCallback to prevent infinite re-renders
+  const fetchBlockchainData = useCallback(async (projectId: string) => {
     try {
       setLoadingBlockchain(true);
       const result = await contributionApi.getProjectContributionInfo(projectId);
@@ -124,9 +204,9 @@ export default function ProjectDetailsPage() {
     } finally {
       setLoadingBlockchain(false);
     }
-  };
+  }, []);
 
-  const fetchContributions = async (projectId: string) => {
+  const fetchContributions = useCallback(async (projectId: string) => {
     try {
       // Use the correct API endpoint
       const result = await contributionApi.getProjectContributions(projectId);
@@ -149,16 +229,53 @@ export default function ProjectDetailsPage() {
       console.error('❌ Failed to fetch contributions:', error);
       setContributions([]);
     }
-  };
+  }, [project]); // ✅ Added project dependency since it's used in the function
 
-  const checkIfFavorite = async (id: string) => {
+  // Fix: Wrap fetchProject in useCallback with all dependencies
+  const fetchProject = useCallback(async (id: string) => {
+    try {
+      setLoading(true);
+      const data = await projectApi.getProjectById(id);
+      setProject(data);
+      
+      // Fetch blockchain data if project is on-chain
+      if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
+        await fetchBlockchainData(id);
+        await fetchContributions(id);
+      }
+      
+      // Update last updated timestamp
+      setLastUpdated(new Date().toISOString());
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load project';
+      toast({
+        title: 'Error',
+        description: message,
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast, fetchBlockchainData, fetchContributions]); // ✅ Added all dependencies
+
+  const checkIfFavorite = useCallback(async (id: string) => {
     try {
       const result = await projectApi.isFavorite(id);
       setIsFavorite(result.isFavorite);
-    } catch (err) {
-      // Ignore error
+    } catch (error) {
+      // Ignore error - remove unused 'err' variable
+      console.error('Failed to check favorite status:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (params.id) {
+      fetchProject(params.id as string);
+      checkIfFavorite(params.id as string);
+    }
+  }, [params.id, fetchProject, checkIfFavorite]); // Now all functions are stable due to useCallback
 
   const toggleFavorite = async () => {
     if (!project) return;
@@ -181,10 +298,10 @@ export default function ProjectDetailsPage() {
           duration: 3000,
         });
       }
-    } catch (err: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: err.message || 'Failed to update favorites',
+        description: error instanceof Error ? error.message : 'Failed to update favorites',
         status: 'error',
         duration: 5000,
       });
@@ -253,6 +370,7 @@ export default function ProjectDetailsPage() {
   const isFullyFunded = blockchainData?.isFullyFunded || 
     (getCurrentFunding() >= getFundingGoal() && getFundingGoal() > 0);
 
+  // Early return must come AFTER all hooks
   if (loading) {
     return (
       <RouteGuard allowedRoles={['INVESTOR', 'FARMER', 'GOVERNMENT_OFFICIAL']}>
@@ -488,7 +606,7 @@ export default function ProjectDetailsPage() {
                     {/* Overview Tab */}
                     <TabPanel px={0} pt={6}>
                       <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                        <Card bg={useColorModeValue('gray.50', 'gray.700')}>
+                        <Card bg={overviewCardBg}>
                           <CardBody>
                             <VStack spacing={4} align="stretch">
                               <Heading size="sm" mb={2}>Project Details</Heading>
@@ -524,7 +642,7 @@ export default function ProjectDetailsPage() {
                           </CardBody>
                         </Card>
 
-                        <Card bg={useColorModeValue('gray.50', 'gray.700')}>
+                        <Card bg={overviewCardBg}>
                           <CardBody>
                             <VStack spacing={4} align="stretch">
                               <Heading size="sm" mb={2}>Farmer Information</Heading>
@@ -567,7 +685,7 @@ export default function ProjectDetailsPage() {
                     <TabPanel px={0} pt={6}>
                       {blockchainData ? (
                         <VStack spacing={4} align="stretch">
-                          <Card bg={useColorModeValue('purple.50', 'purple.900')}>
+                          <Card bg={blockchainCardBg}>
                             <CardBody>
                               <VStack align="start" spacing={3}>
                                 <Heading size="sm">Smart Contract</Heading>
@@ -599,10 +717,10 @@ export default function ProjectDetailsPage() {
                             </CardBody>
                           </Card>
 
-                          <Card bg={useColorModeValue('green.50', 'green.900')}>
+                          <Card bg={farmerCardBg}>
                             <CardBody>
                               <VStack align="start" spacing={3}>
-                                <Heading size="sm">Farmer's Wallet</Heading>
+                                <Heading size="sm">Farmer&#39;s Wallet</Heading>
                                 <Text fontSize="sm" color="gray.600">
                                   Funds will {isFullyFunded ? 'have been' : 'be'} automatically released to:
                                 </Text>
@@ -621,7 +739,7 @@ export default function ProjectDetailsPage() {
                             </CardBody>
                           </Card>
 
-                          <Card bg={useColorModeValue('blue.50', 'blue.900')}>
+                          <Card bg={fundingCardBg}>
                             <CardBody>
                               <VStack align="start" spacing={3}>
                                 <Heading size="sm">Funding Status</Heading>
@@ -656,108 +774,27 @@ export default function ProjectDetailsPage() {
                     </TabPanel>
 
                     {/* Contributors Tab */}
-                    // Replace the entire Contributors Tab section with this fixed version:
-
-{/* Contributors Tab */}
-<TabPanel px={0} pt={6}>
-  {contributions.length > 0 ? (
-    <VStack spacing={3} align="stretch">
-      {contributions.map((contribution: any, index: number) => {
-        // Debug log to see what data we're getting
-        console.log('📋 Contribution Data:', contribution);
-        
-        // Safely extract data with fallbacks
-        const contributorName = contribution.contributor 
-          ? `${contribution.contributor.firstName || ''} ${contribution.contributor.lastName || ''}`.trim()
-          : contribution.contributorName || 'Anonymous Contributor';
-        
-        const amount = contribution.amountMatic || contribution.amount || 0;
-        const date = contribution.contributedAt || contribution.createdAt || contribution.date;
-        
-        // Safe date formatting
-        let formattedDate = 'Invalid Date';
-        try {
-          if (date) {
-            const validDate = new Date(date);
-            if (!isNaN(validDate.getTime())) {
-              formattedDate = validDate.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Date formatting error:', error);
-        }
-
-        return (
-          <Card key={contribution._id || index} bg={useColorModeValue('gray.50', 'gray.700')}>
-            <CardBody>
-              <Flex justify="space-between" align="center">
-                <HStack spacing={3}>
-                  <Box
-                    w={10}
-                    h={10}
-                    bg="purple.100"
-                    borderRadius="full"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    fontWeight="bold"
-                    color="purple.600"
-                  >
-                    {index + 1}
-                  </Box>
-                  <VStack align="start" spacing={0}>
-                    <Text fontWeight="bold">
-                      {contributorName || 'Anonymous'}
-                    </Text>
-                    <Text fontSize="sm" color="gray.600">
-                      {formattedDate}
-                    </Text>
-                    {contribution.transactionHash && (
-                      <Text fontSize="xs" color="blue.600" fontFamily="mono">
-                        TX: {contribution.transactionHash.slice(0, 10)}...
-                      </Text>
-                    )}
-                  </VStack>
-                </HStack>
-                <VStack align="end" spacing={0}>
-                  <HStack>
-                    <Text fontWeight="bold" color="purple.600">
-                      {formatMatic(amount)}
-                    </Text>
-                    <Text fontWeight="bold" color="purple.500">MATIC</Text>
-                  </HStack>
-                  <Badge 
-                    colorScheme={
-                      contribution.status === 'confirmed' ? 'green' : 
-                      contribution.status === 'pending' ? 'yellow' : 'gray'
-                    } 
-                    fontSize="xs"
-                  >
-                    {contribution.status ? contribution.status.charAt(0).toUpperCase() + contribution.status.slice(1) : 'Confirmed'}
-                  </Badge>
-                </VStack>
-              </Flex>
-            </CardBody>
-          </Card>
-        );
-      })}
-    </VStack>
-  ) : (
-    <VStack spacing={4} py={12}>
-      <Icon as={FiUsers} boxSize={12} color="gray.400" />
-      <Text color="gray.600">No contributions yet</Text>
-      <Text fontSize="sm" color="gray.500" textAlign="center">
-        Be the first to support this project!
-      </Text>
-    </VStack>
-  )}
-</TabPanel>
+                    <TabPanel px={0} pt={6}>
+                      {contributions.length > 0 ? (
+                        <VStack spacing={3} align="stretch">
+                          {contributions.map((contribution: Contribution, index: number) => (
+                            <ContributionCard 
+                              key={contribution._id || index} 
+                              contribution={contribution} 
+                              index={index} 
+                            />
+                          ))}
+                        </VStack>
+                      ) : (
+                        <VStack spacing={4} py={12}>
+                          <Icon as={FiUsers} boxSize={12} color="gray.400" />
+                          <Text color="gray.600">No contributions yet</Text>
+                          <Text fontSize="sm" color="gray.500" textAlign="center">
+                            Be the first to support this project!
+                          </Text>
+                        </VStack>
+                      )}
+                    </TabPanel>
 
                     {/* Verification Tab */}
                     {project.verification?.verifiedBy && (
@@ -809,19 +846,18 @@ export default function ProjectDetailsPage() {
 
         {/* Contribution Modal */}
         {project && (
-          <ContributionModal
-            isOpen={isOpen}
-            onClose={onClose}
-            project={project}
-            onSuccess={() => {
-              // Refresh project data and blockchain data
-              if (params.id) {
-                fetchProject(params.id as string);
-              }
-              onClose();
-            }}
-          />
-        )}
+        <ContributionModal
+          isOpen={isOpen}
+          onClose={onClose}
+          project={project as Project} 
+          onSuccess={() => {
+            if (params.id) {
+              fetchProject(params.id as string);
+            }
+            onClose();
+          }}
+  />
+)}
       </Box>
     </RouteGuard>
   );

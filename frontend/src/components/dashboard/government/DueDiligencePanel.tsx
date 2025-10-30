@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Project, UpdateDueDiligenceDto, projectApi } from "@/lib/projectApi";
@@ -29,17 +30,13 @@ import {
   StatLabel,
   StatNumber,
   StatHelpText,
-  Tooltip,
 } from '@chakra-ui/react';
 import { 
   FiCheckCircle, 
-  FiAlertTriangle, 
-  FiClock, 
   FiUser, 
   FiFileText,
   FiTrendingUp,
   FiMapPin,
-  FiCalendar,
   FiAward,
 } from 'react-icons/fi';
 
@@ -86,7 +83,7 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
   ];
 
   // Enhanced due diligence checks with real project data
-  const generateDueDiligenceChecks = (): DueDiligenceCheck[] => {
+  const generateDueDiligenceChecks = React.useCallback((): DueDiligenceCheck[] => {
     const baseChecks: DueDiligenceCheck[] = [
       {
         id: 'document-verification',
@@ -221,12 +218,12 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
     ];
 
     return baseChecks;
-  };
+  }, [project]);
 
   // Initialize local checks on mount
   useEffect(() => {
     setLocalChecks(generateDueDiligenceChecks());
-  }, [project._id]);
+  }, [project._id, generateDueDiligenceChecks]);
 
   const getChecksByCategory = (category: string) => {
     return localChecks.filter(check => check.category === category);
@@ -284,9 +281,9 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
         check.id === checkId 
           ? {
               ...check,
-              status: checkData.status as any,
+              status: checkData.status as 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED', // specify allowed values
               findings: checkData.findings,
-              recommendation: checkData.recommendation as any,
+              recommendation: checkData.recommendation as 'APPROVE' | 'REJECT' | 'NEEDS_MORE_INFO', // specify allowed values
               score: checkData.score,
               assignedTo: user?.id || 'Current User',
             }
@@ -333,11 +330,11 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
       
       setEditingCheck(null);
       setCheckData({ status: '', findings: '', recommendation: '', score: 0 });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating due diligence:', error);
       toast({
         title: 'Update Failed',
-        description: error.message || 'Failed to update due diligence check',
+        description: error instanceof Error ? error.message : 'Failed to update due diligence check',
         status: 'error',
         duration: 3000,
       });
@@ -429,11 +426,11 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
       });
       
       onUpdate(updatedProject);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error completing due diligence:', error);
       toast({
         title: 'Completion Failed',
-        description: error.message || 'Failed to complete due diligence process',
+        description: error instanceof Error ? error.message : 'Failed to complete due diligence process',
         status: 'error',
         duration: 3000,
       });
@@ -527,7 +524,7 @@ export default function DueDiligencePanel({ project, onUpdate }: DueDiligencePan
                 <Text fontWeight="bold">Ready for Final Approval! 🎉</Text>
                 <Text fontSize="sm">
                   All required checks completed with satisfactory scores ({overallScore}/100). 
-                  Click "Complete Assessment" to finalize due diligence.
+                  Click &quot;Complete Assessment&quot; to finalize due diligence.
                 </Text>
               </Box>
             </Alert>

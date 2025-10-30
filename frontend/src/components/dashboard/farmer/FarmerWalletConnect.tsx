@@ -1,7 +1,7 @@
 "use client";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useState } from "react";
-import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
+import { FiCheckCircle } from "react-icons/fi";
 import { useAccount } from "wagmi";
 import { api } from "@/lib/api";
 
@@ -21,7 +21,6 @@ import {
   Heading,
   HStack,
   Icon,
-  Spinner,
   Badge,
 } from '@chakra-ui/react';
 
@@ -56,11 +55,22 @@ export default function FarmerWalletConnect() {
           duration: 5000,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Wallet sync error:', error);
+      
+      let errorMessage = 'Failed to sync wallet';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'response' in error) {
+        // Type-safe way to handle axios-like error responses
+        const responseError = error as { response?: { data?: { message?: string } } };
+        errorMessage = responseError.response?.data?.message || 'Failed to sync wallet';
+      }
+        
       toast({
         title: 'Sync Failed',
-        description: error.response?.data?.message || 'Failed to sync wallet',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
       });

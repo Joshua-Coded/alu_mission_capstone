@@ -2,7 +2,7 @@
 import RouteGuard from "@/components/RouteGuard";
 import contributionApi, { Contribution } from "@/lib/contributionApi";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { 
   FiArrowLeft, 
@@ -42,6 +42,13 @@ import {
   Code,
 } from '@chakra-ui/react';
 
+interface ContributionStats {
+  total: number;
+  totalAmount: number;
+  confirmed: number;
+  pending: number;
+}
+
 export default function ContributionHistoryPage() {
   const router = useRouter();
   const toast = useToast();
@@ -50,7 +57,7 @@ export default function ContributionHistoryPage() {
   const [filteredContributions, setFilteredContributions] = useState<Contribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({ 
+  const [stats, setStats] = useState<ContributionStats>({ 
     total: 0, 
     totalAmount: 0,
     confirmed: 0,
@@ -66,15 +73,7 @@ export default function ContributionHistoryPage() {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
 
-  useEffect(() => {
-    fetchContributions();
-  }, [currentPage, statusFilter]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [contributions, searchTerm]);
-
-  const fetchContributions = async () => {
+  const fetchContributions = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -120,11 +119,11 @@ export default function ContributionHistoryPage() {
           }))
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching contributions:', err);
       toast({
         title: 'Error',
-        description: err.message || 'Failed to load contributions',
+        description: err instanceof Error ? err.message : 'Failed to load contributions',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -133,9 +132,9 @@ export default function ContributionHistoryPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [statusFilter, toast]);
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...contributions];
 
     if (searchTerm) {
@@ -149,7 +148,15 @@ export default function ContributionHistoryPage() {
     }
 
     setFilteredContributions(filtered);
-  };
+  }, [contributions, searchTerm]);
+
+  useEffect(() => {
+    fetchContributions();
+  }, [fetchContributions, currentPage]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
 
   const formatMatic = (amount: number | undefined) => {
     if (!amount || isNaN(amount)) {
@@ -158,43 +165,43 @@ export default function ContributionHistoryPage() {
     return amount.toFixed(4);
   };
 
-// Fixed date formatting - use same logic as ProjectDetailsPage
+  // Fixed date formatting - use same logic as ProjectDetailsPage
   const formatDate = (contribution: Contribution) => {
- 
-  const dateString = contribution.contributedAt || contribution.createdAt || (contribution as any).date;
-  
-  if (!dateString) {
-    console.log('❌ No date field found for contribution:', contribution._id, contribution);
-    return 'Date not available';
-  }
-  
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      console.log('❌ Invalid date:', dateString, 'for contribution:', contribution._id);
-      return 'Invalid Date';
+    const dateString = contribution.contributedAt || contribution.createdAt || (contribution as unknown as Record<string, unknown>).date as string;
+    
+    if (!dateString) {
+      console.log('❌ No date field found for contribution:', contribution._id, contribution);
+      return 'Date not available';
     }
     
-    console.log('✅ Formatted date:', dateString, '->', date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }));
-    
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (error) {
-    console.error('❌ Date formatting error:', error, 'Date string:', dateString);
-    return 'Date not available';
-  }
-};
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        console.log('❌ Invalid date:', dateString, 'for contribution:', contribution._id);
+        return 'Invalid Date';
+      }
+      
+      console.log('✅ Formatted date:', dateString, '->', date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }));
+      
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('❌ Date formatting error:', error, 'Date string:', dateString);
+      return 'Date not available';
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'confirmed': return FiCheckCircle;
@@ -449,12 +456,12 @@ export default function ContributionHistoryPage() {
                               <Text fontSize="md" color="purple.500" fontWeight="bold">MATIC</Text>
                             </HStack>
                             <HStack spacing={4} fontSize="sm" color="gray.600" flexWrap="wrap">
-                            <HStack>
-                                  <Icon as={FiCalendar} />
-                                  <Text>
-                                    {formatDate(contribution)}
-                                  </Text>
-                                </HStack>
+                              <HStack>
+                                <Icon as={FiCalendar} />
+                                <Text>
+                                  {formatDate(contribution)}
+                                </Text>
+                              </HStack>
                               {contribution.transactionHash && (
                                 <Link
                                   href={`https://polygonscan.com/tx/${contribution.transactionHash}`}

@@ -34,14 +34,11 @@ import {
   AlertIcon,
   AlertDescription,
   Progress,
-  Tooltip,
   Icon,
-  Stack,
 } from '@chakra-ui/react';
 import {
   FiUpload,
   FiX,
-  FiCheck,
   FiFileText,
   FiSend,
   FiImage,
@@ -133,7 +130,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       localStorage.setItem('draft_project', JSON.stringify(draftData));
       localStorage.setItem('draft_project_step', activeStep.toString());
     }
-  }, [formData, isOpen, activeStep, projectImagePreviews]);
+  }, [formData, isOpen, activeStep, projectImagePreviews, projectImages.length]);
 
   // ✅ IMPROVED: Restore from localStorage with image previews
   useEffect(() => {
@@ -195,7 +192,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     
     return errors;
   }, [formData]);
-  const handleInputChange = useCallback((field: string, value: any) => {
+  const handleInputChange = useCallback((field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
     if (formErrors[field]) {
@@ -437,12 +434,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       
       onClose();
       resetForm();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Project submission error:', error);
-      
       toast({
         title: "Submission Failed",
-        description: error.message || "Failed to submit project. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to submit project. Please try again.",
         status: "error",
         duration: 5000,
         isClosable: true,

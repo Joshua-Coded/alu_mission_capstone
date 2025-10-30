@@ -3,10 +3,7 @@ import FarmerSidebar from "../dashboard/farmer/FarmerSidebar";
 import React, { useState } from "react";
 import TopHeader from "../dashboard/farmer/TopHeader";
 import { Box, useColorModeValue } from "@chakra-ui/react";
-import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
-
-// components/layout/DashboardLayout.tsx
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -18,7 +15,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   userRole = 'FARMER' 
 }) => {
   const { user, logout } = useAuth();
-  const { address } = useAccount();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   const bgColor = useColorModeValue('gray.50', 'gray.900');
@@ -38,7 +34,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           />
         );
       case 'INVESTOR':
-        // You can create InvestorSidebar later
         return (
           <FarmerSidebar 
             isCollapsed={sidebarCollapsed}
@@ -46,7 +41,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           />
         );
       case 'GOVERNMENT':
-        // You can create GovernmentSidebar later
         return (
           <FarmerSidebar 
             isCollapsed={sidebarCollapsed}
@@ -71,13 +65,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
       {/* Top Header */}
       <TopHeader
         user={user}
-      
         onLogout={logout}
         onToggleSidebar={toggleSidebar}
         sidebarCollapsed={sidebarCollapsed}
       />
       
-      {/* Main Content - FIXED: Full width with proper spacing */}
+      {/* Main Content */}
       <Box 
         ml={sidebarCollapsed ? '70px' : '280px'}
         transition="margin-left 0.3s ease"

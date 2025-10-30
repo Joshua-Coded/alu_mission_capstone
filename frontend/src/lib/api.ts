@@ -165,12 +165,18 @@ export interface WalletUpdateResponse {
   success: boolean;
   message: string;
   walletAddress: string;
-  user?: any;
+  user?: unknown;
 }
 
 class ApiService {
   async register(data: RegisterData): Promise<AuthResponse> {
+    // Validate passwords match before sending to server
+    if (data.password !== data.confirmPassword) {
+      throw new Error('Passwords do not match');
+    }
+    
     // Remove confirmPassword before sending to backend
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { confirmPassword, ...registerData } = data;
     const response = await apiClient.post<AuthResponse>('/auth/register', registerData);
     return response.data;

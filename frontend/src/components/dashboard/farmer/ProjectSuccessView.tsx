@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { Project } from "@/lib/projectApi";
 
 import {
   Box,
@@ -32,13 +33,8 @@ import {
 } from 'react-icons/fi';
 
 interface ProjectSuccessViewProps {
-  project: any;
-  blockchainData?: {
-    currentFunding: string;
-    fundingGoal: string;
-    contributorCount?: number;
-    isFullyFunded: boolean;
-  };
+  project: Project;
+  blockchainData?: Record<string, unknown> | null;
 }
 
 const ProjectSuccessView: React.FC<ProjectSuccessViewProps> = ({
@@ -50,9 +46,18 @@ const ProjectSuccessView: React.FC<ProjectSuccessViewProps> = ({
     'linear(to-br, purple.900, pink.900)'
   );
 
-  const currentFunding = blockchainData?.currentFunding || project.currentFunding?.toFixed(4) || '0';
-  const fundingGoal = blockchainData?.fundingGoal || project.fundingGoal?.toFixed(4) || '0';
-  const contributorCount = blockchainData?.contributorCount || project.contributorsCount || 0;
+  // Safe data extraction with type guards
+  const currentFunding = blockchainData?.currentFunding 
+    ? String(blockchainData.currentFunding)
+    : project.currentFunding?.toFixed(4) || '0';
+    
+  const fundingGoal = blockchainData?.fundingGoal 
+    ? String(blockchainData.fundingGoal)
+    : project.fundingGoal?.toFixed(4) || '0';
+    
+  const contributorCount = blockchainData?.contributorCount 
+    ? Number(blockchainData.contributorCount)
+    : project.contributorsCount || 0;
 
   return (
     <VStack spacing={6} align="stretch">
@@ -119,7 +124,7 @@ const ProjectSuccessView: React.FC<ProjectSuccessViewProps> = ({
             <VStack align="start" spacing={2}>
               <Text>
                 This project has reached its funding goal. The smart contract has automatically
-                released <strong>{currentFunding} MATIC</strong> to the farmer's wallet.
+                released <strong>{currentFunding} MATIC</strong> to the farmer&apos;s wallet.
               </Text>
               <Text fontWeight="bold" color="green.600">
                 Thank you to all {contributorCount} contributors who made this project a success!
@@ -146,7 +151,7 @@ const ProjectSuccessView: React.FC<ProjectSuccessViewProps> = ({
               </Text>
             </HStack>
             <Text fontSize="sm" color="gray.600">
-              The smart contract automatically released funds to the farmer's wallet:
+              The smart contract automatically released funds to the farmer&apos;s wallet:
             </Text>
             <HStack spacing={2} w="full" flexWrap="wrap">
               <Code fontSize="sm" colorScheme="green" p={2} borderRadius="md">

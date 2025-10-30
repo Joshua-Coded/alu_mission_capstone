@@ -1,5 +1,4 @@
 "use client";
-import { useEffect, useState } from "react";
 import { FiDollarSign, FiRefreshCw } from "react-icons/fi";
 import { useAccount, useBalance } from "wagmi";
 
@@ -23,7 +22,7 @@ export default function WithdrawalCard() {
   
   const { data: balance, isLoading, refetch } = useBalance({
     address: address,
-    chainId: 11155111, // Sepolia
+    chainId: 137, // Polygon Mainnet
   });
 
   const handleRefresh = () => {
@@ -66,17 +65,22 @@ export default function WithdrawalCard() {
 
           {isLoading ? (
             <VStack py={4}>
-              <Spinner color="blue.500" />
+              <Spinner color="purple.500" />
             </VStack>
           ) : (
             <VStack spacing={3} align="stretch">
               <HStack justify="space-between">
                 <Text fontSize="sm" color="gray.600">Available Balance:</Text>
                 <VStack align="end" spacing={0}>
-                  <Text fontSize="2xl" fontWeight="bold" color="green.600">
-                    {balance?.formatted ? parseFloat(balance.formatted).toFixed(4) : '0'} ETH
-                  </Text>
-                  <Badge colorScheme="blue" fontSize="xs">Sepolia Testnet</Badge>
+                  <HStack spacing={1}>
+                    <Text fontSize="2xl" fontWeight="bold" color="purple.600">
+                      {balance?.formatted ? parseFloat(balance.formatted).toFixed(4) : '0'}
+                    </Text>
+                    <Text fontSize="xl" fontWeight="bold" color="purple.500">
+                      MATIC
+                    </Text>
+                  </HStack>
+                  <Badge colorScheme="purple" fontSize="xs">Polygon Mainnet</Badge>
                 </VStack>
               </HStack>
 
@@ -87,22 +91,25 @@ export default function WithdrawalCard() {
               <Divider />
 
               <Text fontSize="sm" color="gray.600">
-                You can withdraw your ETH directly from your MetaMask wallet at any time.
+                You can withdraw your MATIC directly from your MetaMask wallet at any time.
               </Text>
 
               <Button
-                colorScheme="blue"
+                colorScheme="purple"
                 leftIcon={<Icon as={FiDollarSign} />}
                 onClick={() => {
-                  if (typeof window !== 'undefined' && (window as any).ethereum) {
-                    (window as any).ethereum.request({
+                  const ethereum = (window as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+                  if (typeof window !== 'undefined' && ethereum) {
+                    ethereum.request({
                       method: 'wallet_switchEthereumChain',
-                      params: [{ chainId: '0xaa36a7' }], // Sepolia
+                      params: [{ chainId: '0x89' }], // Polygon Mainnet (137 in hex)
+                    }).catch((error) => {
+                      console.error('Failed to switch network:', error);
                     });
                   }
                   toast({
                     title: 'Manage in MetaMask',
-                    description: 'You can send ETH directly from your MetaMask wallet',
+                    description: 'You can send MATIC directly from your MetaMask wallet',
                     status: 'info',
                     duration: 5000,
                   });

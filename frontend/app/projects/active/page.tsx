@@ -3,9 +3,11 @@ import ContributionModal from "@/components/dashboard/contributor/ContributionMo
 import ProjectCard from "@/components/dashboard/farmer/ProjectCard";
 import RouteGuard from "@/components/RouteGuard";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FiArrowLeft, FiSearch } from "react-icons/fi";
-import { projectApi } from "@/lib/projectApi";
+import { Project, projectApi } from "@/lib/projectApi";
+
+// import "@/components/dashboard/farmer/ProjectCard";
 
 import {
   Box,
@@ -30,35 +32,28 @@ import {
 export default function ActiveProjectsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen, onClose } = useDisclosure();
   
-  const [projects, setProjects] = useState<any[]>([]);
-  const [filteredProjects, setFilteredProjects] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<any>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  useEffect(() => {
-    filterProjects();
-  }, [projects, searchQuery, categoryFilter]);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       const data = await projectApi.getVerifiedProjects();
-      const active = data.filter((p: any) => p.status === 'active');
+      const active = data.filter((p: Project) => p.status === 'active');
       setProjects(active);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load projects';
       toast({
         title: 'Error',
-        description: err.message || 'Failed to load projects',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -66,9 +61,9 @@ export default function ActiveProjectsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const filterProjects = () => {
+  const filterProjects = useCallback(() => {
     let filtered = [...projects];
 
     if (searchQuery) {
@@ -85,16 +80,18 @@ export default function ActiveProjectsPage() {
     }
 
     setFilteredProjects(filtered);
-  };
+  }, [projects, searchQuery, categoryFilter]);
 
-  const handleViewProject = (project: any) => {
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    filterProjects();
+  }, [filterProjects]);
+
+  const handleViewProject = (project: Project) => {
     router.push(`/projects/${project._id}`);
-  };
-
-  const handleInvestClick = (project: any, event: any) => {
-    event.stopPropagation();
-    setSelectedProject(project);
-    onOpen();
   };
 
   return (

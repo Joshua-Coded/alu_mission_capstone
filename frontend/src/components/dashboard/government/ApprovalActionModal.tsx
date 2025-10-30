@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { FiAlertCircle, FiCheckCircle } from "react-icons/fi";
+import { FiCheckCircle } from "react-icons/fi";
 import { Project as ApiProject } from "@/lib/projectApi";
 
 import {
@@ -68,10 +68,10 @@ export default function ApprovalActionModal({
       });
       setComment('');
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Approval Failed',
-        description: error.message || 'Failed to approve project. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to approve project. Please try again.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -160,7 +160,7 @@ export default function ApprovalActionModal({
                 <Text fontSize="xs" color="gray.600">
                   • Project becomes visible to investors for funding<br />
                   • Farmer receives approval notification<br />
-                  • Project status changes to "Active"
+                  • Project status changes to &quot;Active&quot;
                 </Text>
               </Box>
             </Alert>

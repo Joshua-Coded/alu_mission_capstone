@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FiAlertCircle, FiBell, FiCheckCircle, FiClock, FiInfo, FiTrendingUp, FiUsers } from "react-icons/fi";
-import { Project as ApiProject, projectApi } from "@/lib/projectApi";
+import { PlatformStats, Project as ApiProject, projectApi } from "@/lib/projectApi";
 
 import {
   Card,
@@ -30,47 +30,50 @@ interface AlertsSectionProps {
   onRefresh?: () => void;
 }
 
+interface AlertItem {
+  type: 'warning' | 'info' | 'success' | 'error';
+  title: string;
+  description: string;
+  time: string;
+  icon: React.ElementType;
+  projectId?: string;
+  priority: number; // 1 = highest, 3 = lowest
+}
+
 export default function AlertsSection({ projects, onRefresh }: AlertsSectionProps) {
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const [loading, setLoading] = useState(false);
-  const [platformStats, setPlatformStats] = useState<any>(null);
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const toast = useToast();
 
-  // Fetch platform stats for additional insights
-  useEffect(() => {
-    fetchPlatformStats();
-  }, []);
-
-  const fetchPlatformStats = async () => {
+  const fetchPlatformStats = useCallback(async () => {
     try {
       setLoading(true);
       const stats = await projectApi.getPlatformStats();
       setPlatformStats(stats);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching platform stats:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load platform statistics';
       toast({
         title: 'Error loading statistics',
-        description: error.message || 'Failed to load platform statistics',
+        description: errorMessage,
         status: 'error',
         duration: 3000,
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  // Fetch platform stats for additional insights
+  useEffect(() => {
+    fetchPlatformStats();
+  }, [fetchPlatformStats]);
 
   // Generate real alerts from project data
-  const generateAlerts = () => {
-    const alerts: Array<{
-      type: 'warning' | 'info' | 'success' | 'error';
-      title: string;
-      description: string;
-      time: string;
-      icon: any;
-      projectId?: string;
-      priority: number; // 1 = highest, 3 = lowest
-    }> = [];
+  const generateAlerts = (): AlertItem[] => {
+    const alerts: AlertItem[] = [];
 
     // Count pending projects (HIGH PRIORITY)
     const pendingCount = projects.filter(p => p.status === 'submitted').length;

@@ -152,6 +152,11 @@ export default function ProjectsTable({
   const [sortBy, setSortBy] = useState<'date' | 'funding' | 'status'>('date');
   const toast = useToast();
 
+  const tableBg = useColorModeValue('white', 'gray.800');
+  const tableBorder = useColorModeValue('gray.200', 'gray.600');
+  const rowHoverBg = useColorModeValue('gray.50', 'gray.700');
+  const footerBg = useColorModeValue('purple.50', 'gray.700');
+
   // Filter projects
   const filteredProjects = projects.filter(project => {
     // Search matching
@@ -280,7 +285,7 @@ export default function ProjectsTable({
         status: 'success',
         duration: 3000,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Export Failed',
         description: 'Failed to export data',
@@ -304,7 +309,7 @@ export default function ProjectsTable({
   }
 
   return (
-    <Card bg={useColorModeValue('white', 'gray.800')} border="1px" borderColor={useColorModeValue('gray.200', 'gray.600')}>
+    <Card bg={tableBg} border="1px" borderColor={tableBorder}>
       <CardHeader pb={4}>
         <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
           <Box>
@@ -335,7 +340,7 @@ export default function ProjectsTable({
               size="sm"
               w={{ base: 'full', md: '140px' }}
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'funding' | 'status')}
             >
               <option value="date">Sort: Date</option>
               <option value="funding">Sort: Funding</option>
@@ -446,7 +451,7 @@ export default function ProjectsTable({
                     : 0;
 
                   return (
-                    <Tr key={projectId} _hover={{ bg: useColorModeValue('gray.50', 'gray.700') }}>
+                    <Tr key={projectId} _hover={{ bg: rowHoverBg }}>
                       {/* Project ID */}
                       <Td fontFamily="mono" fontSize="xs" fontWeight="medium">
                         <Tooltip label={project._id}>
@@ -690,7 +695,7 @@ export default function ProjectsTable({
 
         {/* Footer Info */}
         {projects.length > 0 && (
-          <Box mt={4} p={3} bg={useColorModeValue('purple.50', 'gray.700')} borderRadius="md" fontSize="sm" color="gray.700">
+          <Box mt={4} p={3} bg={footerBg} borderRadius="md" fontSize="sm" color="gray.700">
             <HStack justify="space-between" flexWrap="wrap">
               <Text>
                 Showing <strong>{sortedProjects.length}</strong> of <strong>{projects.length}</strong> total projects
@@ -700,7 +705,7 @@ export default function ProjectsTable({
               </Text>
               {searchTerm && (
                 <Badge colorScheme="purple" fontSize="xs">
-                  Searching: "{searchTerm}"
+                  Searching: &quot;{searchTerm}&quot;
                 </Badge>
               )}
             </HStack>

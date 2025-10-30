@@ -2,9 +2,11 @@
 import ProjectCard from "@/components/dashboard/farmer/ProjectCard";
 import RouteGuard from "@/components/RouteGuard";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FiArrowLeft, FiHeart } from "react-icons/fi";
-import { projectApi } from "@/lib/projectApi";
+import { Project, projectApi } from "@/lib/projectApi";
+
+// import  from "@/components/dashboard/farmer/ProjectCard";
 
 import {
   Box,
@@ -23,24 +25,21 @@ import {
 export default function FavoritesPage() {
   const router = useRouter();
   const toast = useToast();
-  const [favorites, setFavorites] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 
-  useEffect(() => {
-    fetchFavorites();
-  }, []);
-
-  const fetchFavorites = async () => {
+  const fetchFavorites = useCallback(async () => {
     try {
       setLoading(true);
       const data = await projectApi.getFavorites();
       setFavorites(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load favorites';
       toast({
         title: 'Error',
-        description: err.message || 'Failed to load favorites',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -48,29 +47,14 @@ export default function FavoritesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleViewProject = (project: any) => {
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
+
+  const handleViewProject = (project: Project) => {
     router.push(`/projects/${project._id}`);
-  };
-
-  const handleRemoveFavorite = async (projectId: string) => {
-    try {
-      await projectApi.removeFromFavorites(projectId);
-      setFavorites(favorites.filter(p => p._id !== projectId));
-      toast({
-        title: 'Removed from favorites',
-        status: 'success',
-        duration: 3000,
-      });
-    } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.message || 'Failed to remove favorite',
-        status: 'error',
-        duration: 5000,
-      });
-    }
   };
 
   return (
@@ -92,7 +76,7 @@ export default function FavoritesPage() {
             <Box>
               <Heading size="xl" mb={2}>My Watchlist</Heading>
               <Text color="gray.600">
-                Projects you've saved for later
+                Projects you&apos;ve saved for later
               </Text>
             </Box>
 

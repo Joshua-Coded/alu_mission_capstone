@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
@@ -12,32 +12,19 @@ import {
   Button,
   HStack,
   Box,
-  Text,
   useToast,
   Spinner,
 } from '@chakra-ui/react';
 
 export default function WalletSyncAlert() {
-  const { address, isConnected } = useAccount();
-  const { user } = useAuth();
+  const { address,  } = useAccount();
+  useAuth();
   const [loading, setLoading] = useState(false);
-  const [synced, setSynced] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [, setSynced] = useState(false);
+  const [, setDismissed] = useState(false);
   const toast = useToast();
 
-  // Check if wallet is already synced
-  const hasWalletSynced = user?.walletAddress && user.walletAddress.length > 0;
   
-  // Check if current wallet matches synced wallet
-//   const isCurrentWalletSynced = hasWalletSynced && 
-//     user.walletAddress.toLowerCase() === address?.toLowerCase();
-
-//   useEffect(() => {
-//     if (isCurrentWalletSynced) {
-//       setSynced(true);
-//     }
-//   }, [isCurrentWalletSynced]);
-
   const handleSync = async () => {
     if (!address) return;
 
@@ -61,11 +48,20 @@ export default function WalletSyncAlert() {
           window.location.reload();
         }, 1500);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Wallet sync error:', error);
+      const errorMessage = (() => {
+        if (error instanceof Error) return error.message;
+        if (typeof error === 'object' && error !== null && 'response' in error) {
+          const resp = (error as { response?: { data?: { message?: string } } }).response;
+          return resp?.data?.message || 'Failed to sync wallet. Please try again.';
+        }
+        return 'Failed to sync wallet. Please try again.';
+      })();
+        
       toast({
         title: 'Sync Failed',
-        description: error.response?.data?.message || 'Failed to sync wallet. Please try again.',
+        description: errorMessage,
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -75,10 +71,6 @@ export default function WalletSyncAlert() {
     }
   };
 
-  // Don't show if: not connected, already synced, or dismissed
-//   if (!isConnected || synced || dismissed || isCurrentWalletSynced) {
-//     return null;
-//   }
 
   return (
     <Alert

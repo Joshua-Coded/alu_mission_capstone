@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { FundingProgress, Project, projectApi } from "../../lib/projectApi";
+import React, { useCallback, useEffect, useState } from "react";
+import { Project, projectApi } from "../../lib/projectApi";
 
 interface FundingProgressWithBlockchainProps {
   project: Project;
@@ -12,19 +12,17 @@ export const FundingProgressWithBlockchain: React.FC<FundingProgressWithBlockcha
   showBlockchainInfo = true,
   className = '' 
 }) => {
-  const [blockchainStatus, setBlockchainStatus] = useState<any>(null);
+  const [blockchainStatus, setBlockchainStatus] = useState<{
+    blockchainFunding?: string;
+    isFunded?: boolean;
+    canComplete?: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
 
   const progressPercentage = (project.currentFunding / project.fundingGoal) * 100;
   const isFullyFunded = project.currentFunding >= project.fundingGoal;
 
-  useEffect(() => {
-    if (showBlockchainInfo && project.blockchainStatus === 'created') {
-      fetchBlockchainStatus();
-    }
-  }, [project._id, project.blockchainStatus]);
-
-  const fetchBlockchainStatus = async () => {
+  const fetchBlockchainStatus = useCallback(async () => {
     try {
       setLoading(true);
       const status = await projectApi.getBlockchainStatus(project._id);
@@ -34,7 +32,14 @@ export const FundingProgressWithBlockchain: React.FC<FundingProgressWithBlockcha
     } finally {
       setLoading(false);
     }
-  };
+  }, [project._id]);
+  
+  useEffect(() => {
+    if (showBlockchainInfo && project.blockchainStatus === 'created') {
+      fetchBlockchainStatus();
+    }
+  }, [project._id, project.blockchainStatus, showBlockchainInfo, fetchBlockchainStatus]);
+  
 
   const getFundingDifference = () => {
     if (!blockchainStatus?.blockchainFunding) return null;

@@ -316,7 +316,7 @@ export default function VerifyEmailPage() {
                   </Link>
                 </Text>
                 <Badge colorScheme="gray" fontSize="xs">
-                  We're here to help 24/7
+                  We&apos;re here to help 24/7
                 </Badge>
               </VStack>
             </Box>

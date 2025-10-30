@@ -1,9 +1,9 @@
 import CreateProjectModal from "./CreateProjectModal";
 import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { FiActivity, FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
+import { FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
 import { Project as ApiProject, ProjectStatus, projectApi } from "../../../lib/projectApi";
 import { EditProjectModal } from "./EditProjectModal";
 import { ShareProjectModal } from "./ShareProjectModal";
@@ -36,11 +36,8 @@ import {
   AlertIcon,
   AlertTitle,
   AlertDescription,
-  Grid,
   Tabs,
-  TabList,
   TabPanels,
-  Tab,
   TabPanel,
 } from '@chakra-ui/react';
 
@@ -66,7 +63,7 @@ const FarmerProjectsSection: React.FC = () => {
   const { isOpen: isShareOpen, onOpen: onShareOpen, onClose: onShareClose } = useDisclosure();
 
   // Fetch projects from backend
-  const loadProjects = async (showRefreshToast = false) => {
+  const loadProjects = useCallback(async (showRefreshToast = false) => {
     try {
       if (showRefreshToast) {
         setRefreshing(true);
@@ -126,12 +123,12 @@ const FarmerProjectsSection: React.FC = () => {
         });
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ ERROR LOADING PROJECTS:', error);
-      console.error('Error details:', error.response?.data || error.message);
+      console.error('Error details:', error instanceof Error ? error.message : String(error));
       toast({
         title: 'Error loading projects',
-        description: error.message || 'Failed to load projects',
+        description: error instanceof Error ? error.message : 'Failed to load projects',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -140,7 +137,7 @@ const FarmerProjectsSection: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [toast]); // Only run on mount
 
   // Load projects on mount
   useEffect(() => {
@@ -153,7 +150,7 @@ const FarmerProjectsSection: React.FC = () => {
     }, 30000);
     
     return () => clearInterval(interval);
-  }, []); // Only run on mount
+  }, [loadProjects]); // Only run on mount
 
   // Filter projects based on URL parameter
   const filteredProjects = useMemo(() => {
@@ -505,7 +502,7 @@ const FarmerProjectsSection: React.FC = () => {
                 {projects.length > 0 ? (
                   <>
                     You have {projects.length} project{projects.length !== 1 ? 's' : ''} total, 
-                    but none match the "{filterParam}" filter.
+                    but none match the &quot;{filterParam}&quot; filter.
                   </>
                 ) : (
                   'Start by creating your first project and get government approval to receive funding.'

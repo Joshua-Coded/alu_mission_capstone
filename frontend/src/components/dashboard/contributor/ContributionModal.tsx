@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDollarSign, FiExternalLink, FiInfo } from "react-icons/fi";
 import { parseEther } from "viem";
 import { useAccount, useChainId } from "wagmi";
+import { ProjectContributionInfo } from "@/lib/contributionApi";
+import { Project } from "@/lib/projectApi";
 
 import {
   Modal,
@@ -38,18 +40,16 @@ import {
   Code,
 } from '@chakra-ui/react';
 
+
 interface ContributionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  project: any;
+  project: Project;
   onSuccess?: () => void;
 }
 
-interface ProjectReadiness {
-  ready: boolean;
-  reason?: string;
-  project?: any;
-}
+
+
 
 export default function ContributionModal({
   isOpen,
@@ -65,12 +65,18 @@ export default function ContributionModal({
   const [loading, setLoading] = useState(false);
   const [txHash, setTxHash] = useState<string>('');
   const [step, setStep] = useState<'checking' | 'input' | 'sending' | 'confirming' | 'recording' | 'success'>('checking');
-  const [project, setProject] = useState(initialProject);
-  const [contributionInfo, setContributionInfo] = useState<any>(null);
+  const [project, setProject] = useState<Project>(initialProject);
+  const [contributionInfo, setContributionInfo] = useState<ProjectContributionInfo | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [projectReady, setProjectReady] = useState<boolean>(false);
-  const [readinessCheck, setReadinessCheck] = useState<ProjectReadiness | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_readinessCheck, setReadinessCheck] = useState<{
+    ready: boolean;
+    reason?: string;
+    project?: Project | string;
+    blockchainInfo?: unknown;
+  } | null>(null);
 
   const POLYGON_MAINNET = {
     chainId: 137,
@@ -88,103 +94,90 @@ export default function ContributionModal({
   const isPolygon = chainId === 137;
   const isSupported = chainId === 137;
 
-
-useEffect(() => {
-  const checkProjectAndFetchInfo = async () => {
-    if (!initialProject?._id) return;
-    
-    try {
-      setLoadingInfo(true);
-      setError(null);
-      setStep('checking');
-
-      const readinessResult = await contributionApi.isProjectReadyForContributions(initialProject._id);
+  useEffect(() => {
+    const checkProjectAndFetchInfo = async () => {
+      if (!initialProject?._id) return;
       
-      if (!readinessResult.success) {
-        throw new Error(readinessResult.error || 'Failed to check project status');
-      }
-
-      if (!readinessResult.data) {
-        throw new Error('No project readiness data received');
-      }
-
-      setReadinessCheck(readinessResult.data);
-
-      if (!readinessResult.data.ready) {
-        setError(readinessResult.data.reason || 'Project not ready for contributions');
-        setProjectReady(false);
-        setLoadingInfo(false);
-        return;
-      }
-
-      setProjectReady(true);
-      
-      if (readinessResult.data.project) {
-        setProject(readinessResult.data.project);
-      }
-
-      const infoResult = await contributionApi.getProjectContributionInfo(initialProject._id);
-      
-      if (infoResult.success && infoResult.data) {
-        setContributionInfo(infoResult.data);
-        console.log('📊 Contribution Info:', infoResult.data);
+      try {
+        setLoadingInfo(true);
+        setError(null);
+        setStep('checking');
+  
+        const readinessResult = await contributionApi.isProjectReadyForContributions(initialProject._id);
         
-        // ✅ NEW: Check if can contribute
-        if (!(infoResult.data as any).canContribute) {
-          setError((infoResult.data as any).blockingReason || 'Contributions not accepted');
-          setProjectReady(false);
-          toast({
-            title: 'Cannot Contribute',
-            description: (infoResult.data as any).blockingReason || 'This project is not accepting contributions',
-            status: 'info',
-            duration: 7000,
-            isClosable: true,
-          });
-        } else {
-          setStep('input');
+        if (!readinessResult.success) {
+          throw new Error(readinessResult.error || 'Failed to check project status');
         }
-      } else {
-        throw new Error(infoResult.error || 'Failed to load contribution details');
+  
+        if (!readinessResult.data) {
+          throw new Error('No project readiness data received');
+        }
+  
+        setReadinessCheck(readinessResult.data);
+  
+        if (!readinessResult.data.ready) {
+          setError(readinessResult.data.reason || 'Project not ready for contributions');
+          setProjectReady(false);
+          setLoadingInfo(false);
+          return;
+        }
+  
+        setProjectReady(true);
+        
+        if (readinessResult.data.project && typeof readinessResult.data.project !== 'string') {
+          setProject(readinessResult.data.project);
+        }
+  
+        const infoResult = await contributionApi.getProjectContributionInfo(initialProject._id);
+        
+        if (infoResult.success && infoResult.data) {
+          setContributionInfo(infoResult.data);
+          console.log('📊 Contribution Info:', infoResult.data);
+          
+          // Project is ready, move to input step
+          setStep('input');
+        } else {
+          throw new Error(infoResult.error || 'Failed to load contribution details');
+        }
+      } catch (error: unknown) {
+        console.error('Failed to fetch contribution info:', error);
+        
+        // IMPROVED: Better error messages
+        let errorMessage = error instanceof Error ? error.message : 'Failed to load contribution details';
+        
+        if (errorMessage.includes('fully funded') || errorMessage.includes('completed')) {
+          errorMessage = '🎉 This project is fully funded! Goal reached and funds released to farmer.';
+        }
+        
+        setError(errorMessage);
+        setStep('input');
+        
+        toast({
+          title: errorMessage.includes('🎉') ? 'Project Fully Funded!' : 'Error',
+          description: errorMessage,
+          status: errorMessage.includes('🎉') ? 'success' : 'error',
+          duration: 7000,
+          isClosable: true,
+        });
+      } finally {
+        setLoadingInfo(false);
       }
-    } catch (error: any) {
-      console.error('Failed to fetch contribution info:', error);
-      
-      // ✅ IMPROVED: Better error messages
-      let errorMessage = error.message || 'Failed to load contribution details';
-      
-      if (errorMessage.includes('fully funded') || errorMessage.includes('completed')) {
-        errorMessage = '🎉 This project is fully funded! Goal reached and funds released to farmer.';
-      }
-      
-      setError(errorMessage);
-      setStep('input');
-      
-      toast({
-        title: errorMessage.includes('🎉') ? 'Project Fully Funded!' : 'Error',
-        description: errorMessage,
-        status: errorMessage.includes('🎉') ? 'success' : 'error',
-        duration: 7000,
-        isClosable: true,
-      });
-    } finally {
-      setLoadingInfo(false);
+    };
+  
+    if (isOpen) {
+      checkProjectAndFetchInfo();
+      setAmountMatic('');
+      setTxHash('');
+      setStep('checking');
+      setError(null);
+      setProjectReady(false);
+      setReadinessCheck(null);
     }
-  };
-
-  if (isOpen) {
-    checkProjectAndFetchInfo();
-    setAmountMatic('');
-    setTxHash('');
-    setStep('checking');
-    setError(null);
-    setProjectReady(false);
-    setReadinessCheck(null);
-  }
-}, [isOpen, initialProject, toast]);
+  }, [isOpen, initialProject, toast]);
 
   const switchToPolygon = async () => {
     try {
-      await (window as any).ethereum.request({
+      await ((window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum)?.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: POLYGON_MAINNET.chainIdHex }],
       });
@@ -195,10 +188,11 @@ useEffect(() => {
         status: 'success',
         duration: 3000,
       });
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
+    } catch (switchError: unknown) {
+      const sw = switchError as { code?: number };
+      if (sw.code === 4902) {
         try {
-          await (window as any).ethereum.request({
+          await ((window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum)?.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: POLYGON_MAINNET.chainIdHex,
@@ -298,49 +292,6 @@ useEffect(() => {
       });
       return;
     }
-    {!loadingInfo && error && !projectReady && (
-      <>
-        {error.includes('🎉') || error.includes('fully funded') || error.toLowerCase().includes('completed') || error.toLowerCase().includes('not active') ? (
-          // ✅ CELEBRATION ALERT for fully funded projects
-          <Alert status="success" borderRadius="md" variant="subtle">
-            <AlertIcon as={FiCheckCircle} boxSize={8} />
-            <Box flex="1">
-              <AlertTitle fontSize="lg">Project Fully Funded! 🎉</AlertTitle>
-              <AlertDescription fontSize="sm">
-                <VStack align="start" spacing={2} mt={2}>
-                  <Text>
-                    This project has reached its funding goal and funds have been automatically 
-                    released to the farmer's wallet.
-                  </Text>
-                  <Text fontWeight="bold" color="green.600">
-                    Thank you to all contributors who made this project successful!
-                  </Text>
-                  {contributionInfo?.farmerWalletAddress && (
-                    <HStack spacing={2} mt={2}>
-                      <Text fontSize="xs">Farmer received funds at:</Text>
-                      <Code fontSize="xs" colorScheme="green">
-                        {contributionInfo.farmerWalletAddress.slice(0, 6)}...{contributionInfo.farmerWalletAddress.slice(-4)}
-                      </Code>
-                    </HStack>
-                  )}
-                </VStack>
-              </AlertDescription>
-            </Box>
-          </Alert>
-        ) : (
-          // Regular warning alert
-          <Alert status="warning" borderRadius="md">
-            <AlertIcon as={FiAlertCircle} />
-            <Box flex="1">
-              <AlertTitle>Project Not Ready</AlertTitle>
-              <AlertDescription fontSize="sm">
-                {error}
-              </AlertDescription>
-            </Box>
-          </Alert>
-        )}
-      </>
-    )}
   
     if (contributionInfo.blockchainProjectId === null || contributionInfo.blockchainProjectId === undefined) {
       toast({
@@ -366,7 +317,7 @@ useEffect(() => {
         amount: amountMatic,
       });
   
-      const ethereum = (window as any).ethereum;
+      const ethereum = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
       if (!ethereum) {
         throw new Error('MetaMask not installed');
       }
@@ -405,7 +356,7 @@ useEffect(() => {
           data: txData,
           gas: '0x493E0', // 300,000 in hex
         }],
-      });
+      }) as string;
   
       console.log('✅ Transaction sent:', transactionHash);
       setTxHash(transactionHash);
@@ -429,8 +380,8 @@ useEffect(() => {
           const receipt = await ethereum.request({
             method: 'eth_getTransactionReceipt',
             params: [transactionHash],
-          });
-  
+          }) as { status?: string } | null;
+
           if (receipt) {
             console.log('📝 Receipt:', receipt);
             
@@ -442,10 +393,10 @@ useEffect(() => {
               throw new Error('Transaction failed on blockchain. Check Polygonscan for details.');
             }
           }
-  
+
           await new Promise(resolve => setTimeout(resolve, 2000));
           attempts++;
-        } catch (error) {
+        } catch {
           console.log(`Waiting for confirmation... (attempt ${attempts}/${maxAttempts})`);
           await new Promise(resolve => setTimeout(resolve, 2000));
           attempts++;
@@ -456,30 +407,30 @@ useEffect(() => {
         throw new Error('Transaction confirmation timeout. Check Polygonscan: https://polygonscan.com/tx/' + transactionHash);
       }
   
-   // Record in backend
-setStep('recording');
+      // Record in backend
+      setStep('recording');
 
-const contributionResult = await contributionApi.recordContributionAfterTransaction(
-  project._id,
-  parseFloat(amountMatic),
-  transactionHash,
-  address, // ✅ Send wallet address as 3rd parameter
-  { anonymous: false } // metadata as 4th parameter
-);
+      const contributionResult = await contributionApi.recordContributionAfterTransaction(
+        project._id,
+        parseFloat(amountMatic),
+        transactionHash,
+        address,
+        { anonymous: false }
+      );
 
-if (!contributionResult.success) {
-  console.warn('⚠️ Backend recording failed, but blockchain transaction succeeded');
-  console.error('Backend recording error:', contributionResult.error);
-  
-  toast({
-    title: 'Warning',
-    description: 'Transaction succeeded but backend recording failed. Your contribution is on the blockchain.',
-    status: 'warning',
-    duration: 5000,
-  });
-} else {
-  console.log('✅ Backend recording successful:', contributionResult.data);
-}
+      if (!contributionResult.success) {
+        console.warn('⚠️ Backend recording failed, but blockchain transaction succeeded');
+        console.error('Backend recording error:', contributionResult.error);
+        
+        toast({
+          title: 'Warning',
+          description: 'Transaction succeeded but backend recording failed. Your contribution is on the blockchain.',
+          status: 'warning',
+          duration: 5000,
+        });
+      } else {
+        console.log('✅ Backend recording successful:', contributionResult.data);
+      }
   
       setStep('success');
       
@@ -498,15 +449,16 @@ if (!contributionResult.success) {
         onClose();
       }, 3000);
   
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Contribution failed:', error);
       
-      let errorMessage = error.message || 'Transaction failed';
+      let errorMessage = error instanceof Error ? error.message : 'Transaction failed';
       
       // Parse MetaMask errors
-      if (error.code === 4001) {
+      const e = error as { code?: number };
+      if (e.code === 4001) {
         errorMessage = 'Transaction rejected by user';
-      } else if (error.code === -32603) {
+      } else if (e.code === -32603) {
         errorMessage = 'Internal JSON-RPC error. Check your wallet balance.';
       } else if (errorMessage.includes('insufficient funds')) {
         errorMessage = 'Insufficient MATIC balance for transaction + gas fees';
@@ -716,7 +668,7 @@ if (!contributionResult.success) {
                   <Box p={3} bg="green.50" borderRadius="md" borderWidth="1px" borderColor="green.200">
                     <HStack justify="space-between" mb={2}>
                       <HStack>
-                        <Text fontWeight="semibold" color="green.700" fontSize="sm">Farmer's Wallet</Text>
+                        <Text fontWeight="semibold" color="green.700" fontSize="sm">Farmer&#39;s Wallet</Text>
                         <Tooltip label="Auto-release when goal reached" fontSize="xs">
                           <span><Icon as={FiInfo} color="green.500" boxSize={3} /></span>
                         </Tooltip>
@@ -758,7 +710,7 @@ if (!contributionResult.success) {
                         {step === 'confirming' && '⏳ Confirming on Polygon...'}
                         {step === 'recording' && '📝 Recording contribution...'}
                       </Text>
-                      <Text fontSize="xs" color="gray.600">Please don't close this window</Text>
+                      <Text fontSize="xs" color="gray.600">Please don&#39;t close this window</Text>
                       {txHash && (
                         <Link
                           href={`https://polygonscan.com/tx/${txHash}`}

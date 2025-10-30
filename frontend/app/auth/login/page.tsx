@@ -58,8 +58,8 @@ export default function LoginPage() {
     try {
       await login(data);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
     }
@@ -172,7 +172,7 @@ export default function LoginPage() {
             <Box mt={8}>
               <Divider />
               <Text textAlign="center" mt={6} color="gray.600">
-                Don't have an account?{' '}
+                Don&apos;t have an account?{' '}
                 <Link as={NextLink} href="/auth/register" color="brand.500" fontWeight="semibold">
                   Create one here
                 </Link>

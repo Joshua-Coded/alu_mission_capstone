@@ -33,7 +33,7 @@ export default function RouteGuard({
       }
 
       // Role not allowed
-      if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role as any)) {
+      if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role as 'FARMER' | 'INVESTOR' | 'GOVERNMENT_OFFICIAL')) {
         router.push('/unauthorized');
         return;
       }

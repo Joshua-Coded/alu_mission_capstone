@@ -5,7 +5,7 @@ import FarmerStatsGrid from "./FarmerStatsGrid";
 import ProfileSettings from "@/components/common/ProfileSettings";
 import ProjectCard from "@/components/dashboard/farmer/ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Project, projectApi } from "@/lib/projectApi";
 
@@ -19,8 +19,18 @@ import {
 } from '@chakra-ui/react';
 import {
   FiPlus, FiSearch, FiRefreshCw, FiCheckCircle, FiClock,
-  FiXCircle, FiAlertCircle, FiPackage, FiActivity,
+  FiXCircle, FiAlertCircle, FiPackage,
 } from 'react-icons/fi';
+
+interface UserProfileData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  location: string;
+  bio: string;
+  walletAddress: string;
+}
 
 // ============================================
 // DASHBOARD TAB - UPDATED WITH ACTIVITY FEED
@@ -32,10 +42,10 @@ export const DashboardTab = () => (
       
       {/* Main Content Grid with Activity Feed */}
       <Grid 
-        templateColumns={{ base: "1fr", lg: "2fr 1fr" }} 
-        gap={6} 
-        align="start"
-      >
+          templateColumns={{ base: "1fr", lg: "2fr 1fr" }} 
+          gap={6} 
+          alignItems="start"
+        >
         {/* Left Column - Projects and Quick Actions */}
         <VStack spacing={6} align="stretch">
           <Box w="full">
@@ -91,7 +101,7 @@ export const ProjectsTab = () => {
 
   const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
 
-  const loadProjects = async (showLoading = true) => {
+  const loadProjects = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) {
         setIsLoading(true);
@@ -122,10 +132,10 @@ export const ProjectsTab = () => {
           }
         }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading projects:', error);
-      const errorMessage = error.message || 'Failed to load projects';
-      setError(errorMessage);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load projects';
+      setError(errorMessage);    
       toast({ 
         title: 'Error Loading Projects', 
         description: errorMessage, 
@@ -136,7 +146,7 @@ export const ProjectsTab = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [toast]);
 
   // Filter projects based on search and status
   useEffect(() => {
@@ -169,7 +179,7 @@ export const ProjectsTab = () => {
     }, 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [loadProjects]);
 
   const handleViewDetails = (project: Project) => {
     setSelectedProject(project);
@@ -469,7 +479,15 @@ export const InventoryTab = () => (
 // ============================================
 // PROFILE TAB
 // ============================================
-export const ProfileTab = ({ user }: { user: any }) => (
+export const ProfileTab = ({ user }: { user: {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  location?: string;
+  bio?: string;
+  walletAddress?: string;
+} | null })  => (
   <VStack spacing={6} align="stretch">
     <ProfileSettings
       userType="farmer"
@@ -482,9 +500,21 @@ export const ProfileTab = ({ user }: { user: any }) => (
         bio: user?.bio || '',
         walletAddress: user?.walletAddress || '',
       }}
-      onSave={async (data: any) => console.log('Save:', data)}
+      onSave={async (data) => {
+        // Map the ProfileSettings data format to your UserProfileData format
+        const mappedData: UserProfileData = {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          phoneNumber: data.phone || '', // ProfileSettings uses 'phone', not 'phoneNumber'
+          location: data.location || '',
+          bio: data.bio || '',
+          walletAddress: '', // ProfileSettings doesn't include walletAddress
+        };
+        console.log('Save:', mappedData);
+      }}
     />
-  </VStack>
+  </VStack> 
 );
 
 // ============================================

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import contributionApi, { Contribution } from "@/lib/contributionApi";
 import { projectApi } from "@/lib/projectApi";
 
@@ -151,11 +151,7 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -256,14 +252,14 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
                 });
 
                 // Add individual investment activities
-                contributions.forEach((contribution: { amountMatic: any; amount: any; contributedAt: any; createdAt: any; }, index: any) => {
+                contributions.forEach((contribution: Contribution, index: number) => {
                   generatedActivities.push({
                     id: `investment-${project._id}-${index}`,
                     type: 'investment',
                     title: 'New Investment',
                     description: `Received ${contribution.amountMatic || contribution.amount} MATIC for "${project.title}"`,
                     amount: contribution.amountMatic || contribution.amount,
-                    timestamp: new Date(contribution.contributedAt || contribution.createdAt),
+                    timestamp: new Date(contribution.contributedAt || contribution.createdAt || ''),
                     projectId: project._id,
                     projectTitle: project.title,
                   });
@@ -371,13 +367,17 @@ export const ActivityFeed: React.FC<{ limit?: number }> = ({ limit = 10 }) => {
       
       setActivities(sortedActivities);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error loading activities:', error);
-      setError(error.message || 'Failed to load activities');
+      setError(error instanceof Error ? error.message : 'Failed to load activities');
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
+
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
 
   const handleRetry = () => {
     loadActivities();

@@ -1,6 +1,9 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Image } from "@chakra-ui/react";
 import { Project, projectApi } from "../../../lib/projectApi";
+
+// import { Project, xprojectApi } from "../../../lib/projectApi";
 
 const ActiveProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -25,37 +28,7 @@ const ActiveProjectsPage: React.FC = () => {
     { value: 'ORGANIC_FARMING', label: 'Organic Farming' },
   ];
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  useEffect(() => {
-    filterAndSortProjects();
-  }, [projects, searchTerm, selectedCategory, selectedLocation, sortBy]);
-
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // ✅ FIXED: Use the correct API method with proper error handling
-      const data = await projectApi.getVerifiedProjects();
-      
-      // ✅ FIXED: Filter for active AND verified projects (both can receive contributions)
-      const activeProjects = data.filter(p => 
-        p.status === 'active' || p.status === 'verified'
-      );
-      
-      setProjects(activeProjects);
-    } catch (err: any) {
-      console.error('Error fetching projects:', err);
-      setError(err.message || 'Failed to load projects. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filterAndSortProjects = () => {
+  const filterAndSortProjects = useCallback(() => {
     let filtered = [...projects];
 
     if (searchTerm) {
@@ -88,6 +61,38 @@ const ActiveProjectsPage: React.FC = () => {
     });
 
     setFilteredProjects(filtered);
+  }, [projects, searchTerm, selectedCategory, selectedLocation, sortBy]);
+
+  useEffect(() => {
+    fetchProjects();
+    filterAndSortProjects();
+  }, [filterAndSortProjects]);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // ✅ FIXED: Use the correct API method with proper error handling
+      const data = await projectApi.getVerifiedProjects();
+      
+      // ✅ FIXED: Filter for active AND verified projects (both can receive contributions)
+      const activeProjects = data.filter(p => 
+        p.status === 'active' || p.status === 'verified'
+      );
+      
+      setProjects(activeProjects);
+    } catch (err) {
+      if (err instanceof Error) {
+        console.error('Error fetching projects:', err);
+        setError(err.message);
+      } else {
+        console.error('Error fetching projects:', err);
+        setError('Failed to load projects. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getUniqueLocations = () => {
@@ -224,7 +229,7 @@ const ActiveProjectsPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as 'recent' | 'funded' | 'goal')}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               >
                 <option value="recent">Most Recent</option>
@@ -256,7 +261,7 @@ const ActiveProjectsPage: React.FC = () => {
                   {/* Project Image */}
                   <div className="h-56 bg-gradient-to-br from-green-100 to-green-50 relative">
                     {project.images && project.images.length > 0 ? (
-                      <img src={project.images[0]} alt={project.title} className="w-full h-full object-cover" />
+                      <Image src={project.images[0]} alt={project.title} width={500} height={500} style={{objectFit: 'cover'}} />
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-400">
                         <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,12 +305,13 @@ const ActiveProjectsPage: React.FC = () => {
                   <div className="p-6">
                     {/* Category & Location */}
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                        {projectApi.getCategoryDisplayName?.(project.category as any) || project.category.replace(/_/g, ' ')}
-                      </span>
+                    <span className="text-xs font-medium text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                        {project.category.replace(/_/g, ' ')}
+                        {/* {projectApi.getCategoryDisplayName?.(project.category) || project.category.replace(/_/g, ' ')} */}
+                    </span>
                       <span className="text-xs text-gray-500 flex items-center">
                         <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         {project.location}

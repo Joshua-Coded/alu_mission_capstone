@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ProfileResponse, api } from "../../lib/api";
 
 import {
@@ -16,14 +16,12 @@ import {
   Avatar,
   useColorModeValue,
   Card,
-  CardHeader,
   CardBody,
   Heading,
   Divider,
   SimpleGrid,
   IconButton,
   useToast,
-  Badge,
   Textarea,
   Switch,
   InputGroup,
@@ -55,15 +53,24 @@ import {
 
 interface ProfileSettingsProps {
   userType: 'farmer' | 'investor' | 'government' | 'contributor';
-  userData?: Partial<ProfileResponse>; // Changed to Partial
-  onSave?: (data: any) => Promise<void>;
+  userData?: Partial<ProfileResponse>;
+  onSave?: (data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    location?: string;
+    bio?: string;
+    profileImage?: string;
+  }) => Promise<void>;
 }
 
 const ProfileSettings: React.FC<ProfileSettingsProps> = ({
-  userType,
+  userType: _userType,
   userData: initialUserData,
   onSave,
 }) => {
+  void _userType;
   const toast = useToast();
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -101,13 +108,9 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch profile data on mount
-  useEffect(() => {
-    if (!initialUserData) {
-      loadProfile();
-    }
-  }, []);
+ 
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       setIsLoading(true);
       const profile = await api.getProfile();
@@ -121,11 +124,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         bio: profile.bio || '',
         profileImage: '',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load profile:', error);
       toast({
         title: 'Error Loading Profile',
-        description: error.message || 'Failed to load your profile data',
+        description: error instanceof Error ? error.message : 'Failed to load your profile data',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -133,7 +136,13 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (!initialUserData) {
+      loadProfile();
+    }
+  }, [initialUserData, loadProfile]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -182,8 +191,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       if (onSave) {
         await onSave(formData);
       } else {
-        // TODO: Implement update profile API endpoint
-        // await api.updateProfile(formData);
         
         // For now, simulate API call
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -200,11 +207,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         isClosable: true,
       });
       setIsEditing(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Profile update error:', error);
       toast({
         title: 'Update Failed',
-        description: error.message || 'Failed to update profile. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to update profile. Please try again.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -261,11 +268,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         newPassword: '',
         confirmPassword: '',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Password change error:', error);
       toast({
         title: 'Password Change Failed',
-        description: error.message || 'Unable to change password. Please try again.',
+        description: error instanceof Error ? error.message : 'Unable to change password. Please try again.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -303,36 +310,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const getUserTypeLabel = () => {
-    if (!userData) return 'User';
-    
-    if (userData.isGovernmentOfficial || userData.role === 'GOVERNMENT_OFFICIAL') {
-      return 'Government Official';
-    }
-    
-    const labels: Record<string, string> = {
-      FARMER: 'Verified Farmer',
-      INVESTOR: 'Verified Investor',
-      CONTRIBUTOR: 'Contributor',
-    };
-    return labels[userData.role || ''] || 'User';
-  };
-
-  const getUserTypeColor = () => {
-    if (!userData) return 'gray';
-    
-    if (userData.isGovernmentOfficial || userData.role === 'GOVERNMENT_OFFICIAL') {
-      return 'purple';
-    }
-    
-    const colors: Record<string, string> = {
-      FARMER: 'green',
-      INVESTOR: 'blue',
-      CONTRIBUTOR: 'orange',
-    };
-    return colors[userData.role || ''] || 'gray';
   };
 
   if (isLoading) {

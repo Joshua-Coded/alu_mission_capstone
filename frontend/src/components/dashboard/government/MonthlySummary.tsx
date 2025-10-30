@@ -1,5 +1,5 @@
 import  contributionApi  from "@/lib/contributionApi";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Project, projectApi } from "@/lib/projectApi";
 
 // ============================================
@@ -48,7 +48,13 @@ export default function MonthlySummary({ projects, onRefresh }: MonthlySummaryPr
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const [loading, setLoading] = useState(false);
-  const [monthlyStats, setMonthlyStats] = useState<any>(null);
+  const [monthlyStats, setMonthlyStats] = useState<{
+    currentMonthProjects: Project[];
+    previousMonthProjects: Project[];
+    currentMonthContributors: number;
+    previousMonthContributors: number;
+    platformStats: unknown;
+  } | null>(null);
   const toast = useToast();
 
   // Calculate current month metrics
@@ -58,76 +64,77 @@ export default function MonthlySummary({ projects, onRefresh }: MonthlySummaryPr
   const previousMonth = currentMonth === 0 ? 11 : currentMonth - 1;
   const previousYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  // Fetch additional monthly statistics
-  useEffect(() => {
-    fetchMonthlyStats();
-  }, [projects]);
+  // Fetch additional monthly statistics - MOVE THIS useEffect AFTER fetchMonthlyStats definition
+const fetchMonthlyStats = useCallback(async () => {
+  try {
+    setLoading(true);
+    
+    // Get platform stats for additional insights
+    const platformStats = await projectApi.getPlatformStats();
+    
+    // Calculate current month metrics from projects
+    const currentMonthProjects = projects.filter(p => {
+      const date = new Date(p.createdAt);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
 
-  const fetchMonthlyStats = async () => {
-    try {
-      setLoading(true);
-      
-      // Get platform stats for additional insights
-      const platformStats = await projectApi.getPlatformStats();
-      
-      // Calculate current month metrics from projects
-      const currentMonthProjects = projects.filter(p => {
-        const date = new Date(p.createdAt);
-        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-      });
+    const previousMonthProjects = projects.filter(p => {
+      const date = new Date(p.createdAt);
+      return date.getMonth() === previousMonth && date.getFullYear() === previousYear;
+    });
 
-      const previousMonthProjects = projects.filter(p => {
-        const date = new Date(p.createdAt);
-        return date.getMonth() === previousMonth && date.getFullYear() === previousYear;
-      });
+    // Calculate contributor growth for current month
+    let currentMonthContributors = 0;
+    let previousMonthContributors = 0;
 
-      // Calculate contributor growth for current month
-      let currentMonthContributors = 0;
-      let previousMonthContributors = 0;
-
-      for (const project of currentMonthProjects) {
-        try {
-          const contributions = await contributionApi.getProjectContributions(project._id);
-          if (contributions.success && contributions.data) {
-            currentMonthContributors += contributions.data.contributorCount || 0;
-          }
-        } catch (error) {
-          console.error(`Error fetching contributions for project ${project._id}:`, error);
+    for (const project of currentMonthProjects) {
+      try {
+        const contributions = await contributionApi.getProjectContributions(project._id);
+        if (contributions.success && contributions.data) {
+          currentMonthContributors += contributions.data.contributorCount || 0;
         }
+      } catch (error) {
+        console.error(`Error fetching contributions for project ${project._id}:`, error);
       }
-
-      for (const project of previousMonthProjects) {
-        try {
-          const contributions = await contributionApi.getProjectContributions(project._id);
-          if (contributions.success && contributions.data) {
-            previousMonthContributors += contributions.data.contributorCount || 0;
-          }
-        } catch (error) {
-          console.error(`Error fetching contributions for project ${project._id}:`, error);
-        }
-      }
-
-      const stats = {
-        currentMonthProjects,
-        previousMonthProjects,
-        currentMonthContributors,
-        previousMonthContributors,
-        platformStats,
-      };
-
-      setMonthlyStats(stats);
-    } catch (error: any) {
-      console.error('Error fetching monthly stats:', error);
-      toast({
-        title: 'Error loading monthly statistics',
-        description: 'Some metrics may be incomplete',
-        status: 'warning',
-        duration: 3000,
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+
+    for (const project of previousMonthProjects) {
+      try {
+        const contributions = await contributionApi.getProjectContributions(project._id);
+        if (contributions.success && contributions.data) {
+          previousMonthContributors += contributions.data.contributorCount || 0;
+        }
+      } catch (error) {
+        console.error(`Error fetching contributions for project ${project._id}:`, error);
+      }
+    }
+
+    const stats = {
+      currentMonthProjects,
+      previousMonthProjects,
+      currentMonthContributors,
+      previousMonthContributors,
+      platformStats,
+    };
+
+    setMonthlyStats(stats);
+  } catch (error: unknown) {
+    console.error('Error fetching monthly stats:', error);
+    toast({
+      title: 'Error loading monthly statistics',
+      description: 'Some metrics may be incomplete',
+      status: 'warning',
+      duration: 3000,
+    });
+  } finally {
+    setLoading(false);
+  }
+}, [projects, currentMonth, currentYear, previousMonth, previousYear, toast]);
+
+// NOW put the useEffect AFTER the useCallback
+useEffect(() => {
+  fetchMonthlyStats();
+}, [fetchMonthlyStats]);
 
   // Calculate metrics
   const newProjects = monthlyStats?.currentMonthProjects.length || 0;

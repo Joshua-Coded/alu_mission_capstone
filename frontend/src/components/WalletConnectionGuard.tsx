@@ -43,7 +43,7 @@ export default function WalletConnectionGuard({
   showNetworkStatus = true,
   showWithdrawalButton = true
 }: WalletConnectionGuardProps) {
-  const { isConnected, address } = useAccount();
+  const { isConnected,  } = useAccount();
   const chainId = useChainId();
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');

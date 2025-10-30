@@ -199,7 +199,7 @@ export interface Activity {
   timestamp: Date;
   projectId?: string;
   investorAddress?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   priority?: 'low' | 'medium' | 'high';
   actionRequired?: boolean;
 }
@@ -240,7 +240,7 @@ export interface Notification {
   timestamp: Date;
   read: boolean;
   actionUrl?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface MarketPrice {

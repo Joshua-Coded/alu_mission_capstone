@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Activity, FarmStats, FarmerData, Project } from "../types/farmer";
 
 export const useFarmerData = (farmerId?: string) => {
@@ -9,8 +9,7 @@ export const useFarmerData = (farmerId?: string) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchFarmerData = async () => {
+  const fetchFarmerData = useCallback(async () => {
       if (!farmerId) return;
       
       setIsLoading(true);
@@ -43,10 +42,11 @@ export const useFarmerData = (farmerId?: string) => {
       } finally {
         setIsLoading(false);
       }
-    };
+    }, [farmerId]);
 
+  useEffect(() => {
     fetchFarmerData();
-  }, [farmerId]);
+  }, [fetchFarmerData]);
 
   const createProject = async (projectData: Partial<Project>) => {
     try {
@@ -97,6 +97,6 @@ export const useFarmerData = (farmerId?: string) => {
     error,
     createProject,
     updateProject,
-    refetch: () => useFarmerData()
+    refetch: fetchFarmerData
   };
 };

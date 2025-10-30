@@ -93,8 +93,10 @@ const normalizeProjectStatus = (status: string): string => {
 export default function ProjectDetailsModal({
   isOpen, onClose, project, onApprove, onReject, onRequestRevision, onAssignOfficer
 }: ProjectDetailsModalProps) {
-  const cardBg = useColorModeValue('white', 'gray.800');
+  const headerBg = useColorModeValue('purple.50', 'gray.900');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
+  const descBg = useColorModeValue('gray.50', 'gray.700');
+  const descBorder = useColorModeValue('gray.200', 'gray.600');
   const toast = useToast();
 
   if (!project) return null;
@@ -146,12 +148,6 @@ export default function ProjectDetailsModal({
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0
-    }).format(amount);
-  };
-
   // Format MATIC amount for blockchain projects
   const formatMatic = (amount: number) => {
     return `${amount.toFixed(2)} MATIC`;
@@ -170,7 +166,7 @@ export default function ProjectDetailsModal({
     <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent maxH="90vh">
-        <ModalHeader borderBottom="1px" borderColor={borderColor} bg={useColorModeValue('purple.50', 'gray.900')}>
+        <ModalHeader borderBottom="1px" borderColor={borderColor} bg={headerBg}>
           <VStack align="start" spacing={2}>
             <HStack justify="space-between" w="full">
               <Text fontSize="2xl" fontWeight="bold" color="purple.700">{project.title}</Text>
@@ -364,11 +360,11 @@ export default function ProjectDetailsModal({
                         <Box 
                           pl={8} 
                           whiteSpace="pre-wrap" 
-                          bg={useColorModeValue('gray.50', 'gray.700')} 
+                          bg={descBg} 
                           p={4} 
                           borderRadius="md"
                           border="1px"
-                          borderColor={useColorModeValue('gray.200', 'gray.600')}
+                          borderColor={descBorder}
                         >
                           {project.description || 'No description provided for this project.'}
                         </Box>
