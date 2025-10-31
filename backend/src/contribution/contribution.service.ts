@@ -10,6 +10,9 @@ import { Contribution, ContributionDocument, ContributionStatus } from "./schema
 
 @Injectable()
 export class ContributionService {
+  create(createDto: { projectId: string; amount: number; currency: "ETH"; }, arg1: string) {
+    throw new Error("Method not implemented.");
+  }
   private readonly logger = new Logger(ContributionService.name);
 
   constructor(

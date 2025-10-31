@@ -264,7 +264,7 @@ export class UsersService {
       const existingWallet = await this.userModel.findOne({
         walletAddress: walletAddress.toLowerCase().trim(),
         _id: { $ne: userId }
-      });
+      }).exec(); // <-- ADD .exec() HERE
   
       if (existingWallet) {
         throw new ConflictException('Wallet address already registered to another user');
