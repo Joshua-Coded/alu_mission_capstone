@@ -210,47 +210,51 @@ export default function ProjectDetailsPage() {
       
       if (result.success && result.data) {
         console.log('✅ Contributions:', result.data.contributions);
-        setContributions(result.data.contributions || []);
+        const fetchedContributions = result.data.contributions || [];
+        const contributorCount = result.data.contributorCount || fetchedContributions.length || 0;
         
-        // Update project with real contributor count
-        if (project) {
-          setProject({
-            ...project,
-            contributorsCount: result.data.contributorCount || result.data.contributions?.length || 0,
-          });
-        }
+        setContributions(fetchedContributions);
+        
+        // ✅ FIX: Use functional setState with proper type checking
+        setProject(prevProject => {
+          if (!prevProject) return prevProject;
+          return {
+            ...prevProject,
+            contributorsCount: contributorCount,
+          };
+        });
       }
     } catch (error) {
       console.error('❌ Failed to fetch contributions:', error);
       setContributions([]);
     }
-  }, [project]);
+  }, []); // ✅ Empty dependencies array
 
-  // Wrap fetchProject in useCallback with all dependencies
-  const fetchProject = useCallback(async (id: string) => {
-    try {
-      setLoading(true);
-      const data = await projectApi.getProjectById(id);
-      setProject(data);
-      
-      // Fetch blockchain data if project is on-chain
-      if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
-        await fetchBlockchainData(id);
-        await fetchContributions(id);
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to load project';
-      toast({
-        title: 'Error',
-        description: message,
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setLoading(false);
+// ✅ fetchProject now works correctly
+const fetchProject = useCallback(async (id: string) => {
+  try {
+    setLoading(true);
+    const data = await projectApi.getProjectById(id);
+    setProject(data);
+    
+    // Fetch blockchain data if project is on-chain
+    if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
+      await fetchBlockchainData(id);
+      await fetchContributions(id);
     }
-  }, [toast, fetchBlockchainData, fetchContributions]);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load project';
+    toast({
+      title: 'Error',
+      description: message,
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
+  } finally {
+    setLoading(false);
+  }
+}, [toast, fetchBlockchainData, fetchContributions]);
 
   const checkIfFavorite = useCallback(async (id: string) => {
     try {

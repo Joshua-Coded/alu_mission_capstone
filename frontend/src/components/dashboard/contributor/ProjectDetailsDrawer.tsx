@@ -58,7 +58,7 @@ export default function ProjectDetailsPage() {
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const bgColor = useColorModeValue('gray.50', 'gray.900');
 
-  const fetchProjectContributions = useCallback(async () => {
+  const fetchProjectContributions = useCallback(async (fallbackCount?: number) => {
     if (!projectId) return;
     try {
       setLoadingContributions(true);
@@ -68,11 +68,12 @@ export default function ProjectDetailsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch project contributions:', error);
-      setRealContributorCount(project?.contributorsCount || 0);
+      // ✅ Use fallback parameter instead of reading from project state
+      setRealContributorCount(fallbackCount || 0);
     } finally {
       setLoadingContributions(false);
     }
-  }, [projectId, project?.contributorsCount]);
+  }, [projectId]); // ✅ Remove project?.contributorsCount from dependencies
 
   const fetchBlockchainData = useCallback(async (projId: string) => {
     try {
@@ -99,7 +100,9 @@ export default function ProjectDetailsPage() {
       setLoading(true);
       const data = await projectApi.getProjectById(projectId);
       setProject(data);
-      await fetchProjectContributions();
+      
+      // ✅ Pass contributorsCount as parameter to avoid circular dependency
+      await fetchProjectContributions(data.contributorsCount);
        
       // Fetch blockchain data if project is on-chain
       if (data.blockchainProjectId !== null && data.blockchainProjectId !== undefined) {
