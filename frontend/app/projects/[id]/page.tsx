@@ -7,6 +7,7 @@ import { Flex, useDisclosure } from "@chakra-ui/react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Contribution } from "@/lib/contributionApi";
+import type { ProjectContributionInfo } from "@/lib/contributionApi";
 import { projectApi, type Project } from "@/lib/projectApi";
 
 import {
@@ -61,6 +62,7 @@ const ContributionCard = ({ contribution, index }: { contribution: Contribution;
   
   const amount = contribution.amountMatic || contribution.amount || 0;
   const date = contribution.contributedAt || contribution.createdAt;
+  
 
   
   // Safe date formatting
@@ -155,17 +157,30 @@ export default function ProjectDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   
-  interface BlockchainData extends Record<string, unknown> {
-    currentFunding: string;
-    fundingGoal: string;
-    isFullyFunded: boolean;
-    isActive: boolean;
-    contractAddress: string;
-    farmerWalletAddress: string;
-    blockchainProjectId: number;
-    lastUpdated: string;
-  }
-  const [blockchainData, setBlockchainData] = useState<BlockchainData | null>(null);
+  // interface BlockchainData {
+  //   currentFunding: string;
+  //   fundingGoal: string;
+  //   isFullyFunded: boolean;
+  //   isActive: boolean;
+  //   contractAddress: string;
+  //   farmerWalletAddress: string;
+  //   blockchainProjectId: number;
+  //   lastUpdated: string;
+  
+  //   contributorCount?: number;
+  //   fundingDeadline?: string;
+  //   instructions?: {
+  //     step1: string;
+  //     step2: string;
+  //     step3: string;
+  //     step4: string;
+  //   };
+  //   minContribution?: number;
+  //   maxContribution?: number;
+  // }
+
+  // const [blockchainData, setBlockchainData] = useState<BlockchainData | null>(null);
+  const [blockchainData, setBlockchainData] = useState<ProjectContributionInfo | null>(null);
   const [loadingBlockchain, setLoadingBlockchain] = useState(false);
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string>('');
@@ -188,16 +203,7 @@ export default function ProjectDetailsPage() {
       const result = await contributionApi.getProjectContributionInfo(projectId);
       
       if (result.success && result.data) {
-        setBlockchainData({
-          currentFunding: result.data.currentFunding || '0',
-          fundingGoal: result.data.fundingGoal || '0',
-          isFullyFunded: result.data.isFullyFunded || false,
-          isActive: result.data.isActive || false,
-          contractAddress: result.data.contractAddress || '',
-          farmerWalletAddress: result.data.farmerWalletAddress || '',
-          blockchainProjectId: result.data.blockchainProjectId || 0,
-          lastUpdated: new Date().toISOString(),
-        });
+        setBlockchainData(result.data);
       }
     } catch (error) {
       console.error('Failed to fetch blockchain data:', error);
@@ -498,98 +504,119 @@ export default function ProjectDetailsPage() {
               </Text>
             </Box>
 
-            {/* Funding Progress Card */}
-            {isFullyFunded ? (
-              <Card bg={cardBg} borderWidth="2px" borderColor="purple.300" shadow="lg">
-                <CardBody>
-                  <ProjectSuccessView
-                    project={project}
-                    blockchainData={blockchainData}
-                  />
-                </CardBody>
-              </Card>
-            ) : (
-              <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-                <CardBody>
-                  <VStack spacing={4} align="stretch">
-                    <HStack justify="space-between">
-                      <Text fontSize="lg" fontWeight="semibold">Funding Progress</Text>
-                      <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
-                        {progress.toFixed(1)}% Funded
-                      </Badge>
-                    </HStack>
+           {/* Funding Progress Card */}
+{isFullyFunded ? (
+  <Card bg={cardBg} borderWidth="2px" borderColor="purple.300" shadow="lg">
+    <CardBody>
+      {blockchainData ? (
+        <ProjectSuccessView
+          project={project}
+          blockchainData={{
+            currentFunding: blockchainData.currentFunding,
+            fundingGoal: blockchainData.fundingGoal,
+            contributorCount: blockchainData.contributorCount,
+            isFullyFunded: blockchainData.isFullyFunded
+          }}
+        />
+      ) : (
+        <VStack spacing={4} py={8}>
+          <Icon as={FiCheckCircle} boxSize={12} color="green.500" />
+          <Text fontSize="xl" fontWeight="bold" color="green.600">
+            🎉 Project Fully Funded!
+          </Text>
+          <Text color="gray.600" textAlign="center">
+            This project has reached its funding goal.
+            {loadingBlockchain ? ' Loading blockchain data...' : ' Waiting for blockchain confirmation.'}
+          </Text>
+          {loadingBlockchain && (
+            <Spinner size="md" color="green.500" />
+          )}
+        </VStack>
+      )}
+    </CardBody>
+  </Card>
+) : (
+  <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+    <CardBody>
+      <VStack spacing={4} align="stretch">
+        <HStack justify="space-between">
+          <Text fontSize="lg" fontWeight="semibold">Funding Progress</Text>
+          <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
+            {progress.toFixed(1)}% Funded
+          </Badge>
+        </HStack>
 
-                    <Progress
-                      value={progress}
-                      size="lg"
-                      colorScheme="green"
-                      borderRadius="full"
-                      hasStripe
-                      isAnimated
-                    />
+        <Progress
+          value={progress}
+          size="lg"
+          colorScheme="green"
+          borderRadius="full"
+          hasStripe
+          isAnimated
+        />
 
-                    <HStack justify="space-between">
-                      <VStack align="start" spacing={0}>
-                        <Text fontSize="sm" color="gray.600">Raised</Text>
-                        <HStack spacing={1}>
-                          <Text fontSize="2xl" fontWeight="bold" color="purple.600">
-                            {formatMatic(currentFunding)}
-                          </Text>
-                          <Text fontSize="lg" fontWeight="bold" color="purple.500">MATIC</Text>
-                        </HStack>
-                        <Text fontSize="xs" color="gray.500" mt={1}>
-                          Updated: {formatDate(blockchainData?.lastUpdated || lastUpdated)}
-                        </Text>
-                      </VStack>
+        <HStack justify="space-between">
+          <VStack align="start" spacing={0}>
+            <Text fontSize="sm" color="gray.600">Raised</Text>
+            <HStack spacing={1}>
+              <Text fontSize="2xl" fontWeight="bold" color="purple.600">
+                {formatMatic(currentFunding)}
+              </Text>
+              <Text fontSize="lg" fontWeight="bold" color="purple.500">MATIC</Text>
+            </HStack>
+            <Text fontSize="xs" color="gray.500" mt={1}>
+              {/* Updated: {formatDate(blockchainData?.lastUpdated || lastUpdated)} */}
+            </Text>
+          </VStack>
 
-                      <VStack align="end" spacing={0}>
-                        <Text fontSize="sm" color="gray.600">Goal</Text>
-                        <HStack spacing={1}>
-                          <Text fontSize="2xl" fontWeight="bold">
-                            {formatMatic(fundingGoal)}
-                          </Text>
-                          <Text fontSize="lg" fontWeight="bold" color="gray.600">MATIC</Text>
-                        </HStack>
-                      </VStack>
-                    </HStack>
+          <VStack align="end" spacing={0}>
+            <Text fontSize="sm" color="gray.600">Goal</Text>
+            <HStack spacing={1}>
+              <Text fontSize="2xl" fontWeight="bold">
+                {formatMatic(fundingGoal)}
+              </Text>
+              <Text fontSize="lg" fontWeight="bold" color="gray.600">MATIC</Text>
+            </HStack>
+          </VStack>
+        </HStack>
 
-                    {blockchainData && (
-                      <VStack spacing={2} pt={2}>
-                        <HStack justify="space-between" w="full" fontSize="sm">
-                          <Text color="gray.600">Contributors:</Text>
-                          <HStack>
-                            <Icon as={FiUsers} color="blue.500" />
-                            <Text fontWeight="bold">{contributions.length}</Text>
-                          </HStack>
-                        </HStack>
-                        <HStack justify="space-between" w="full" fontSize="sm">
-                          <Text color="gray.600">Blockchain Status:</Text>
-                          <Badge colorScheme={blockchainData.isActive ? 'green' : 'gray'}>
-                            {blockchainData.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </HStack>
-                        <HStack justify="space-between" w="full" fontSize="sm">
-                          <Text color="gray.600">Last Updated:</Text>
-                          <Text fontSize="xs" color="gray.500">
-                            {formatDate(blockchainData.lastUpdated)}
-                          </Text>
-                        </HStack>
-                      </VStack>
-                    )}
+        {blockchainData && (
+          <VStack spacing={2} pt={2}>
+            <HStack justify="space-between" w="full" fontSize="sm">
+              <Text color="gray.600">Contributors:</Text>
+              <HStack>
+                <Icon as={FiUsers} color="blue.500" />
+                <Text fontWeight="bold">{contributions.length}</Text>
+              </HStack>
+            </HStack>
+            <HStack justify="space-between" w="full" fontSize="sm">
+              <Text color="gray.600">Blockchain Status:</Text>
+              <Badge colorScheme={blockchainData.isActive ? 'green' : 'gray'}>
+                {blockchainData.isActive ? 'Active' : 'Inactive'}
+              </Badge>
+            </HStack>
+            <HStack justify="space-between" w="full" fontSize="sm">
+              <Text color="gray.600">Last Updated:</Text>
+              <Text fontSize="xs" color="gray.500">
+                {/* {formatDate(blockchainData.lastUpdated)} */}
+              </Text>
+            </HStack>
+          </VStack>
+        )}
 
-                    <Button
-                      colorScheme="green"
-                      size="lg"
-                      w="full"
-                      onClick={onOpen}
-                      isDisabled={progress >= 100 || !blockchainData?.isActive}
-                    >
-                      {progress >= 100 ? 'Fully Funded' : 'Invest in This Project'}
-                    </Button>
-                  </VStack>
-                </CardBody>
-              </Card>
-            )}
+        <Button
+          colorScheme="green"
+          size="lg"
+          w="full"
+          onClick={onOpen}
+          isDisabled={progress >= 100 || !blockchainData?.isActive}
+        >
+          {progress >= 100 ? 'Fully Funded' : 'Invest in This Project'}
+        </Button>
+      </VStack>
+    </CardBody>
+  </Card>
+)}
 
             {/* Tabs Section */}
             <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
@@ -710,7 +737,7 @@ export default function ProjectDetailsPage() {
                                 <HStack justify="space-between" w="full">
                                   <Text fontSize="sm" color="gray.600">Last Updated:</Text>
                                   <Text fontSize="sm" color="gray.500">
-                                    {formatDate(blockchainData.lastUpdated)}
+                                    {/* {formatDate(blockchainData.lastUpdated)} */}
                                   </Text>
                                 </HStack>
                               </VStack>
