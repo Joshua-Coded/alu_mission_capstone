@@ -124,6 +124,9 @@ export default function InvestorDashboard() {
       setLoading(true);
       console.log('🔄 Fetching dashboard data...');
       
+      // ✅ Track if we need to fetch contributions directly
+      let shouldFetchDirectly = false;
+      
       // Fetch contribution stats
       try {
         const statsResult = await contributionApi.getMyStats();
@@ -145,19 +148,26 @@ export default function InvestorDashboard() {
             totalContributions: data.totalContributions,
             projectsSupported: data.projectsSupported
           });
+          
+          // ✅ Check if we got data
+          if (data.totalAmountMatic === 0) {
+            shouldFetchDirectly = true;
+          }
         } else {
           console.log('❌ No stats data in response');
+          shouldFetchDirectly = true;
         }
       } catch (err: unknown) {
         const error = err as Error;
         console.log('❌ Stats API error:', error.message);
+        shouldFetchDirectly = true;
       }
-
-      // If stats are still 0, try fetching contributions directly
-      if (stats.totalAmountMatic === 0) {
+  
+      // ✅ Use local variable instead of reading from state
+      if (shouldFetchDirectly) {
         await fetchContributionsDirectly();
       }
-
+  
       // Fetch recent contributions
       try {
         const contributionsResult = await contributionApi.getMyContributions(1, 5);
@@ -167,8 +177,8 @@ export default function InvestorDashboard() {
           const contributions = contributionsResult.data.contributions || [];
           setRecentContributions(contributions);
           
-          // If we still don't have stats, calculate from contributions
-          if (stats.totalAmountMatic === 0 && contributions.length > 0) {
+          // ✅ Use shouldFetchDirectly instead of checking state
+          if (shouldFetchDirectly && contributions.length > 0) {
             const totalMatic = contributions.reduce((sum: number, contribution: Contribution) => {
               return sum + (contribution.amountMatic || contribution.amount || 0);
             }, 0);
@@ -194,7 +204,7 @@ export default function InvestorDashboard() {
         console.log('❌ Could not fetch recent contributions:', error.message);
       }
       
-      // Fetch projects - FIXED: Using correct Project type
+      // Fetch projects
       try {
         const projects = await projectApi.getVerifiedProjects();
         const activeProjects = projects.filter((p: Project) => p.status === 'active');
@@ -224,7 +234,7 @@ export default function InvestorDashboard() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchContributionsDirectly, stats.totalAmountMatic, toast]);
+  }, [fetchContributionsDirectly, toast]); // ✅ Removed stats.totalAmountMatic
 
   useEffect(() => {
     fetchDashboardData();
