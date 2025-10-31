@@ -2,48 +2,51 @@ import { NextRequest, NextResponse } from "next/server";
 
 // app/api/backend/[...path]/route.ts
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   return handleProxyRequest(request);
 }
 
-export async function POST(
-  request: NextRequest
-) {
+export async function POST(request: NextRequest) {
   return handleProxyRequest(request);
 }
 
-export async function PUT(
-  request: NextRequest
-) {
+export async function PUT(request: NextRequest) {
   return handleProxyRequest(request);
 }
 
-export async function PATCH(
-  request: NextRequest
-) {
+export async function PATCH(request: NextRequest) {
   return handleProxyRequest(request);
 }
 
-export async function DELETE(
-  request: NextRequest
-) {
+export async function DELETE(request: NextRequest) {
   return handleProxyRequest(request);
 }
 
-async function handleProxyRequest(
-  request: NextRequest
-) {
+async function handleProxyRequest(request: NextRequest) {
   // Extract params from the URL
   const pathname = request.nextUrl.pathname;
+  
+  // Remove '/api/backend' prefix (3 segments: ['api', 'backend', ...rest])
   const pathSegments = pathname.split('/').filter(segment => segment.length > 0);
   
- 
-  const backendPathSegments = pathSegments.slice(2); 
+  // Correct path slicing - remove first 2 segments ('api', 'backend')
+  const backendPathSegments = pathSegments.slice(2);
+  
+  if (backendPathSegments.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "No endpoint specified" },
+      { status: 400 }
+    );
+  }
+  
+  // Build the correct backend URL
   const backendUrl = `https://rootrise.onrender.com/api/v1/${backendPathSegments.join('/')}`;
   
-  console.log('🔄 Proxying request to:', backendUrl);
+  console.log('🔄 Proxying request:', {
+    original: pathname,
+    backendPath: backendPathSegments.join('/'),
+    fullUrl: backendUrl
+  });
   
   try {
     // Get the authorization header from the request
@@ -58,14 +61,16 @@ async function handleProxyRequest(
       headers['Authorization'] = authHeader;
     }
     
+    // Copy other relevant headers
+    const contentType = request.headers.get('content-type');
+    if (contentType && contentType !== 'application/json') {
+      headers['Content-Type'] = contentType;
+    }
+    
     // Get the request body for non-GET requests
-    let body: string | undefined;
+    let body: BodyInit | undefined;
     if (request.method !== 'GET') {
-      try {
-        body = await request.text();
-      } catch {
-        // No body provided
-      }
+      body = await request.text();
     }
     
     // Make the request to the backend
@@ -75,29 +80,23 @@ async function handleProxyRequest(
       body: body || undefined,
     });
     
+    // Handle response
     if (!response.ok) {
-      // If it's a 404, try without the /api/v1 prefix
-      if (response.status === 404) {
-        const altBackendUrl = `https://rootrise.onrender.com/${backendPathSegments.join('/')}`;
-        console.log('🔄 Trying alternative URL:', altBackendUrl);
-        
-        const altResponse = await fetch(altBackendUrl, {
-          method: request.method,
-          headers: headers,
-          body: body || undefined,
-        });
-        
-        if (altResponse.ok) {
-          const data = await altResponse.json();
-          return NextResponse.json(data);
-        }
+      console.error('❌ Backend error:', response.status, response.statusText);
+      
+      // Try to get error details from backend
+      let errorData;
+      try {
+        errorData = await response.text();
+      } catch {
+        errorData = 'No error details';
       }
       
-      console.error('❌ Backend responded with error:', response.status, response.statusText);
       return NextResponse.json(
         { 
           success: false,
           error: `Backend responded with ${response.status}: ${response.statusText}`,
+          details: errorData,
           url: backendUrl
         },
         { status: response.status }
