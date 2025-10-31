@@ -191,62 +191,43 @@ export class ContributionController {
     };
   }
 
-  // ==================== PROJECT CONTRIBUTION ENDPOINTS ====================
-  // ⚠️ IMPORTANT: More specific routes MUST come before generic ones
+ // ==================== PROJECT CONTRIBUTION ENDPOINTS ====================
+// ⚠️ IMPORTANT: More specific routes MUST come before generic ones
 
-  @Get('project/:projectId/contribution-info')
-  @Roles(UserRole.CONTRIBUTOR, UserRole.INVESTOR)
-  @ApiOperation({ summary: 'Get project contribution info for MetaMask transaction' })
-  @ApiResponse({ status: 200, description: 'Returns blockchain details for contribution' })
-  async getProjectContributionInfo(@Param('projectId') projectId: string) {
-    this.logger.log(`📊 Getting contribution info for project: ${projectId}`);
-    const info = await this.contributionService.getProjectForContribution(projectId);
-    
-    this.logger.log(`✅ Contribution info retrieved:
-      - Blockchain Project ID: ${info.blockchainProjectId}
-      - Smart Contract: ${info.contractAddress}
-      - Farmer Wallet: ${info.farmerWalletAddress}
-      - Current: ${info.currentFunding} MATIC
-      - Goal: ${info.fundingGoal} MATIC
-      - Fully Funded: ${info.isFullyFunded}
-      - Can Contribute: ${info.canContribute}
-    `);
-    
-    return info;
-  }
+@Get('project/:projectId/contribution-info')
+@Roles(UserRole.CONTRIBUTOR, UserRole.INVESTOR)
+@ApiOperation({ summary: 'Get project contribution info for MetaMask transaction' })
+@ApiResponse({ status: 200, description: 'Returns blockchain details for contribution' })
+async getProjectContributionInfo(@Param('projectId') projectId: string) {
+  this.logger.log(`📊 Getting contribution info for project: ${projectId}`);
+  const info = await this.contributionService.getProjectForContribution(projectId);
+  
+  this.logger.log(`✅ Contribution info retrieved:
+    - Blockchain Project ID: ${info.blockchainProjectId}
+    - Smart Contract: ${info.contractAddress}
+    - Farmer Wallet: ${info.farmerWalletAddress}
+    - Current: ${info.currentFunding} MATIC
+    - Goal: ${info.fundingGoal} MATIC
+    - Fully Funded: ${info.isFullyFunded}
+    - Can Contribute: ${info.canContribute}
+  `);
+  
+  return info;
+}
 
-  @Get('project/:projectId/contributions')
-  @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER, UserRole.GOVERNMENT_OFFICIAL, UserRole.INVESTOR)
-  @ApiOperation({ summary: 'Get all contributions for a project with contributor details' })
-  @ApiResponse({ status: 200, description: 'Returns list of contributions' })
-  async getProjectContributions(@Param('projectId') projectId: string) {
-    this.logger.log(`👥 Getting contributions list for project: ${projectId}`);
-    const result = await this.contributionService.getProjectContributions(projectId);
-    
-    this.logger.log(`✅ Found ${result.contributions.length} contributions, ${result.contributorCount} unique contributors`);
-    
-    return result;
-  }
+@Get('project/:projectId/contributions')
+@Roles(UserRole.CONTRIBUTOR, UserRole.FARMER, UserRole.GOVERNMENT_OFFICIAL, UserRole.INVESTOR)
+@ApiOperation({ summary: 'Get all contributions for a project with contributor details' })
+@ApiResponse({ status: 200, description: 'Returns list of contributions' })
+async getProjectContributions(@Param('projectId') projectId: string) {
+  this.logger.log(`👥 Getting contributions list for project: ${projectId}`);
+  const result = await this.contributionService.getProjectContributions(projectId);
+  
+  this.logger.log(`✅ Found ${result.contributions.length} contributions, ${result.contributorCount} unique contributors`);
+  
+  return result;
+}
 
-  // ⚠️ This generic route MUST come LAST to avoid conflicts
-  @Get(':id')
-  @Roles(UserRole.CONTRIBUTOR, UserRole.FARMER, UserRole.GOVERNMENT_OFFICIAL, UserRole.INVESTOR)
-  @ApiOperation({ summary: 'Get contribution details by ID' })
-  @ApiResponse({ status: 200, description: 'Returns contribution details' })
-  @ApiResponse({ status: 404, description: 'Contribution not found' })
-  async getContribution(@Param('id') id: string, @Req() req: RequestWithUser) {
-    const contribution = await this.contributionService.getContributionById(id);
-
-    // Authorization check
-    if (
-      (req.user.role === UserRole.CONTRIBUTOR || req.user.role === UserRole.INVESTOR) &&
-      contribution.contributor.toString() !== req.user.userId
-    ) {
-      throw new HttpException('Unauthorized', HttpStatus.FORBIDDEN);
-    }
-
-    return contribution;
-  }
 
 @Get('project/:projectId/contribution-count')
 @Roles(UserRole.CONTRIBUTOR, UserRole.INVESTOR, UserRole.FARMER, UserRole.GOVERNMENT_OFFICIAL)
@@ -255,6 +236,26 @@ export class ContributionController {
 async getContributionCount(@Param('projectId') projectId: string) {
   this.logger.log(`🔢 Getting contribution count for project: ${projectId}`);
   return this.contributionService.getContributionCount(projectId);
+}
+
+
+@Get(':id')
+@Roles(UserRole.CONTRIBUTOR, UserRole.FARMER, UserRole.GOVERNMENT_OFFICIAL, UserRole.INVESTOR)
+@ApiOperation({ summary: 'Get contribution details by ID' })
+@ApiResponse({ status: 200, description: 'Returns contribution details' })
+@ApiResponse({ status: 404, description: 'Contribution not found' })
+async getContribution(@Param('id') id: string, @Req() req: RequestWithUser) {
+  const contribution = await this.contributionService.getContributionById(id);
+
+  // Authorization check
+  if (
+    (req.user.role === UserRole.CONTRIBUTOR || req.user.role === UserRole.INVESTOR) &&
+    contribution.contributor.toString() !== req.user.userId
+  ) {
+    throw new HttpException('Unauthorized', HttpStatus.FORBIDDEN);
+  }
+
+  return contribution;
 }
 
 
