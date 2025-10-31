@@ -16,12 +16,100 @@ RootRise is a blockchain-powered agricultural funding platform connecting farmer
 🔗 [https://alu-mission-capstone-zc78.vercel.app](https://alu-mission-capstone-zc78.vercel.app)
 
 **Backend API (Render)**
-🔗 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/api)
+🔗 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/health)
 
 **API Documentation (Swagger)**
 📚 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/api)
 
 **Database:** MongoDB Atlas
+
+---
+
+## Implementation and Testing
+
+### Testing Results
+
+#### Functional Testing
+- User Registration - Register as Farmer, Contributor, Government Official
+- Project Creation - Farmers can create and submit projects
+- Project Verification - Government officials can verify projects
+- Blockchain Contribution - Contributors can fund projects with MATIC
+- Role-based Access - Different dashboards for each user role
+
+#### Performance Testing
+- Frontend Load - Vercel Deployment
+- API Response - Render Backend
+- Blockchain TX - Polygon Mainnet
+
+#### Cross-Browser Testing
+- Chrome 119+
+- Firefox 118+
+- Safari 16+
+- Edge 119+
+
+### Analysis
+
+**Objectives Achieved:**
+- Blockchain integration with Polygon Mainnet
+- Role-based authentication system
+- Project funding with smart contract escrow
+- Real-time transaction tracking
+- Mobile-responsive design
+
+**Technical Success:**
+- Smart contract automatically releases funds upon goal achievement
+- Gas-efficient transactions (~$0.01 per contribution)
+- Secure JWT authentication with role-based permissions
+- Cloudinary integration for image uploads
+
+**Areas for Improvement:**
+- Implement email notifications for project updates
+- Add more detailed analytics dashboard
+- Support for multiple cryptocurrency contributions
+
+### Deployment
+
+#### Deployment Plan
+**Frontend (Vercel):**
+- Connected to GitHub repository
+- Automatic deployments on git push
+- Environment variables configured
+- Custom domain setup
+
+**Backend (Render):**
+- Node.js environment
+- MongoDB Atlas connection
+- Environment variables secured
+- Auto-scaling enabled
+
+**Database (MongoDB Atlas):**
+- Cloud database cluster
+- Automated backups
+- Secure connection strings
+
+#### Verification
+- Frontend accessible at: https://alu-mission-capstone-zc78.vercel.app
+- Backend API responding: https://rootrise.onrender.com/api
+- Database connections stable
+- Blockchain transactions confirmed on Polygonscan
+
+---
+
+## Screenshots
+
+### Main Application Views
+![Home Page](screenshots/home-page.png)
+![Farmer Dashboard](screenshots/farmer-dashboard.png)
+![Contributor Dashboard](screenshots/contributor-dashboard.png)
+![Government Dashboard](screenshots/government-dashboard.png)
+
+### Testing Evidence
+![User Registration Test](screenshots/test1-registration.png)
+![Project Funding Test](screenshots/test2.png)
+![Blockchain Transaction Test](screenshots/test3.png)
+![Mobile Responsive Test](screenshots/test4.png)
+![Admin Verification Test](screenshots/test5.png)
+![Additional Test](screenshots/test6.png)
 
 ---
 
@@ -65,45 +153,6 @@ Frontend runs on `http://localhost:3000`
 - Polygon Mainnet
 - Smart Contract: `0x5387c3bC42304EbfCEFB0aAD1034753217C01b65`
 - MATIC token for contributions
-
----
-
-### Features
-
-🌱 **For Farmers:**
-- Create agricultural projects
-- Set funding goals in MATIC
-- Track project progress
-- Receive transparent funding
-
-💰 **For Contributors:**
-- Browse verified projects
-- Contribute MATIC via blockchain
-- Real-time transaction tracking
-- Portfolio management
-
-🏛️ **For Government Officials:**
-- Project verification system
-- Platform oversight
-- Transparency monitoring
-
-⛓️ **Blockchain Features:**
-- Polygon-based smart contracts
-- Transparent fund escrow
-- Automatic fund release upon goal achievement
-- Immutable transaction records
-
----
-
-### Screenshots
-
-| Screenshot | Description |
-|------------|-------------|
-| ![](screenshots/home-page.png) | Home Page |
-| ![](screenshots/farmer-dashboard.png) | Farmer Dashboard |
-| ![](screenshots/contributor-dashboard.png) | Contributor Dashboard |
-| ![](screenshots/government-dashboard.png) | Government Official Dashboard |
-| ![](screenshots/contribution-modal.png) | Blockchain Contribution Modal |
 
 ---
 
@@ -154,6 +203,7 @@ Includes:
 alu_mission_capstone/
 ├── frontend/                 # Next.js application
 ├── backend/                  # NestJS API
+├── screenshots/              # Application screenshots
 └── README.md
 ```
 
@@ -168,12 +218,4 @@ alu_mission_capstone/
 5. Open a Pull Request
 
 ---
-
-### License
-
-MIT License - see LICENSE file for details
-
----
-
-### Contact
 
