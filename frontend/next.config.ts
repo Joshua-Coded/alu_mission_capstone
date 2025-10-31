@@ -18,7 +18,7 @@ const nextConfig = {
     },
   },
 
-  // ✅ ADDED: API Rewrites to fix CORS issues
+  // API Rewrites to fix CORS issues
   async rewrites() {
     return [
       // Proxy API calls to your backend
@@ -34,7 +34,7 @@ const nextConfig = {
     ];
   },
 
-  // ✅ ENHANCED: Headers with better CORS support
+  // ✅ ENHANCED: Headers with WalletConnect CSP support
   async headers() {
     return [
       {
@@ -56,32 +56,20 @@ const nextConfig = {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
           },
-          // Enhanced CSP for development
+          // ✅ FIXED: Enhanced CSP for WalletConnect and RainbowKit
           {
             key: 'Content-Security-Policy',
-            value: process.env.NODE_ENV === 'development'
-              ? [
-                  "default-src 'self'",
-                  "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-                  "style-src 'self' 'unsafe-inline'",
-                  "connect-src 'self' http://localhost:3001 https://rootrise.onrender.com wss:",
-                  "img-src 'self' https: data: blob:",
-                  "font-src 'self'",
-                  "frame-ancestors 'none'",
-                  "base-uri 'self'",
-                  "form-action 'self'"
-                ].join('; ')
-              : [
-                  "default-src 'self'",
-                  "script-src 'self'",
-                  "style-src 'self' 'unsafe-inline'",
-                  "connect-src 'self' https://rootrise.onrender.com wss:",
-                  "img-src 'self' https: data:",
-                  "font-src 'self'",
-                  "frame-ancestors 'none'",
-                  "base-uri 'self'",
-                  "form-action 'self'"
-                ].join('; '),
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://walletconnect.com https://api.web3modal.org",
+              "style-src 'self' 'unsafe-inline'",
+              "connect-src 'self' https: wss: https://rootrise.onrender.com https://walletconnect.com https://api.web3modal.org https://pulse.walletconnect.org",
+              "img-src 'self' https: data: blob:",
+              "font-src 'self'",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'"
+            ].join('; '),
           },
         ],
       },
