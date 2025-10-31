@@ -36,6 +36,10 @@ export class ContributionService {
       step3: string;
       step4: string;
     };
+    blockchainAvailable: boolean;
+    blockchainError?: string;
+    contributorCount?: number; // ✅ ADDED: Contributor count from database
+    totalContributions?: number; 
   }> {
     try {
       const project = await this.projectsService.findOne(projectId);
@@ -43,66 +47,98 @@ export class ContributionService {
       if (!project) {
         throw new NotFoundException('Project not found');
       }
-
+  
       this.logger.log(`🔍 Project Check:
         - Database ID: ${project._id}
         - Status: ${project.status}
         - Blockchain Project ID: ${project.blockchainProjectId}
         - Blockchain Status: ${project.blockchainStatus}
       `);
-
+  
       if (!project.farmerWalletAddress) {
         throw new BadRequestException('Farmer wallet address not found');
       }
-
+  
       if (project.blockchainProjectId === null || project.blockchainProjectId === undefined) {
         throw new BadRequestException('Project not deployed to blockchain');
       }
-
-      const blockchainInfo = await this.blockchainService.getProjectInfo(
-        project.blockchainProjectId
-      );
-
-      this.logger.log(`📊 Blockchain Info Retrieved:
-        - Project ID: ${project.blockchainProjectId}
-        - Owner: ${blockchainInfo.owner}
-        - Is Active: ${blockchainInfo.isActive}
-        - Is Completed: ${blockchainInfo.isCompleted}
-        - Funds Released: ${blockchainInfo.fundsReleased}
-        - Total Funding: ${blockchainInfo.totalFunding}
-        - Funding Goal: ${blockchainInfo.fundingGoal}
-        - Deadline: ${blockchainInfo.fundingDeadline}
-      `);
-
-      // ✅ NEW: Calculate if can contribute and why not
+  
+      let blockchainInfo;
+      let blockchainAvailable = true;
+      let blockchainError: string | undefined;
+  
+      // ✅ GET DATABASE CONTRIBUTION DATA (always available)
+      const dbContributions = await this.contributionModel
+        .find({ 
+          project: projectId, 
+          status: ContributionStatus.CONFIRMED 
+        })
+        .exec();
+  
+      const totalDbContributions = dbContributions.length;
+      const uniqueDbContributors = new Set(dbContributions.map(c => c.contributor.toString()));
+      const totalDbFunding = dbContributions.reduce((sum, c) => sum + (c.amountMatic || 0), 0);
+  
+      try {
+        blockchainInfo = await this.blockchainService.getProjectInfo(
+          project.blockchainProjectId
+        );
+  
+        this.logger.log(`📊 Blockchain Info Retrieved:
+          - Project ID: ${project.blockchainProjectId}
+          - Total Funding: ${blockchainInfo.totalFunding}
+          - Funding Goal: ${blockchainInfo.fundingGoal}
+        `);
+      } catch (blockchainError) {
+        blockchainAvailable = false;
+        
+        if (blockchainError.message?.includes('rate limit') || 
+            blockchainError.message?.includes('Too many requests')) {
+          blockchainError = 'Blockchain data temporarily unavailable due to rate limits. Using database information.';
+          this.logger.warn(`⚠️ Blockchain rate limit hit for project ${projectId}`);
+        } else {
+          blockchainError = 'Blockchain data currently unavailable. Using database information.';
+          this.logger.error(`❌ Blockchain error for project ${projectId}:`, blockchainError);
+        }
+  
+        // ✅ CREATE FALLBACK using database data
+        blockchainInfo = {
+          owner: project.farmerWalletAddress,
+          isActive: project.status === 'active',
+          isCompleted: totalDbFunding >= project.fundingGoal, // Use database funding
+          fundsReleased: false,
+          totalFunding: (totalDbFunding * 1e18).toString(), // Convert MATIC to wei
+          fundingGoal: project.fundingGoal ? (project.fundingGoal * 1e18).toString() : '0',
+          fundingDeadline: '0'
+        };
+      }
+  
+      // ✅ Calculate if can contribute
       let canContribute = true;
       let blockingReason: string | undefined;
-
+  
       if (project.status !== 'active') {
         canContribute = false;
         blockingReason = `Project status is "${project.status}". Only active projects accept contributions.`;
+      } else if (!blockchainAvailable) {
+        // Still allow contributions if blockchain is down but project is active
+        canContribute = true;
+        blockingReason = '⚠️ Blockchain temporarily unavailable. Contributions may take longer to process.';
       } else if (!blockchainInfo.isActive) {
         canContribute = false;
-        blockingReason = 'Project is not active on blockchain. It may have been deactivated by admin or deadline passed.';
+        blockingReason = 'Project is not active on blockchain.';
       } else if (blockchainInfo.isCompleted) {
         canContribute = false;
-        blockingReason = '🎉 Project is fully funded! Goal reached and funds released to farmer.';
+        blockingReason = '🎉 Project is fully funded!';
       } else if (blockchainInfo.fundsReleased) {
         canContribute = false;
-        blockingReason = 'Funds already released to farmer. No more contributions accepted.';
-      } else {
-        const now = Math.floor(Date.now() / 1000);
-        const deadline = Number(blockchainInfo.fundingDeadline);
-        if (deadline > 0 && now > deadline) {
-          canContribute = false;
-          blockingReason = `Funding deadline has passed. Deadline was ${new Date(deadline * 1000).toLocaleString()}`;
-        }
+        blockingReason = 'Funds already released to farmer.';
       }
-
+  
       const currentFunding = this.formatEther(blockchainInfo.totalFunding.toString());
       const fundingGoal = this.formatEther(blockchainInfo.fundingGoal.toString());
       const deadline = Number(blockchainInfo.fundingDeadline);
-
+  
       return {
         project: project.toObject(),
         blockchainProjectId: project.blockchainProjectId,
@@ -113,8 +149,13 @@ export class ContributionService {
         isFullyFunded: blockchainInfo.isCompleted,
         isActive: blockchainInfo.isActive,
         fundingDeadline: new Date(deadline * 1000).toISOString(),
-        canContribute, // ✅ NEW
-        blockingReason, // ✅ NEW
+        canContribute,
+        blockingReason,
+        blockchainAvailable,
+        blockchainError,
+        // ✅ ADDED: Database contribution data
+        contributorCount: uniqueDbContributors.size,
+        totalContributions: totalDbContributions,
         instructions: {
           step1: 'Connect MetaMask to Polygon Mainnet',
           step2: `User calls contribute(${project.blockchainProjectId}) with MATIC from their wallet`,
@@ -328,6 +369,8 @@ export class ContributionService {
     isFullyFunded: boolean;
     currentFunding: string;
     fundingGoal: string;
+    blockchainAvailable: boolean; 
+    blockchainError?: string; 
   }> {
     try {
       const project = await this.projectsService.findOne(projectId);
@@ -340,22 +383,29 @@ export class ContributionService {
         .populate('contributor', 'firstName lastName email')
         .sort({ contributedAt: -1 })
         .exec();
-
+  
       const totalAmountMatic = contributions.reduce((sum, c) => sum + (c.amountMatic || 0), 0);
       const uniqueContributors = new Set(contributions.map(c => c.contributor.toString()));
-
+  
       let blockchainInfo: any = {
-        totalFunding: BigInt(0),
-        fundingGoal: BigInt(0),
-        isCompleted: false,
+        totalFunding: (totalAmountMatic * 1e18).toString(), // Fallback to database
+        fundingGoal: project.fundingGoal ? (project.fundingGoal * 1e18).toString() : '0',
+        isCompleted: totalAmountMatic >= project.fundingGoal,
       };
-
+      
+      let blockchainAvailable = true;
+      let blockchainError: string | undefined;
+  
       if (project.blockchainProjectId !== null && project.blockchainProjectId !== undefined) {
-        blockchainInfo = await this.blockchainService.getProjectInfo(
-          project.blockchainProjectId
-        );
+        try {
+          blockchainInfo = await this.blockchainService.getProjectInfo(project.blockchainProjectId);
+        } catch (error) {
+          blockchainAvailable = false;
+          blockchainError = 'Blockchain data temporarily unavailable';
+          this.logger.warn(`⚠️ Using database fallback for project ${projectId}`);
+        }
       }
-
+  
       return {
         contributions,
         totalAmountMatic,
@@ -366,6 +416,8 @@ export class ContributionService {
         isFullyFunded: blockchainInfo.isCompleted,
         currentFunding: this.formatEther(blockchainInfo.totalFunding.toString()),
         fundingGoal: this.formatEther(blockchainInfo.fundingGoal.toString()),
+        blockchainAvailable, // ✅ NEW
+        blockchainError, // ✅ NEW
       };
     } catch (error) {
       this.logger.error('❌ Get project contributions failed:', error);
