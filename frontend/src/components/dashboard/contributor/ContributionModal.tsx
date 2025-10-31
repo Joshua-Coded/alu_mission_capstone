@@ -103,6 +103,7 @@ export default function ContributionModal({
         setError(null);
         setStep('checking');
   
+        // ✅ FIX: Get fresh project data first
         const readinessResult = await contributionApi.isProjectReadyForContributions(initialProject._id);
         
         if (!readinessResult.success) {
@@ -115,6 +116,12 @@ export default function ContributionModal({
   
         setReadinessCheck(readinessResult.data);
   
+        // ✅ FIX: Update project state with fresh data immediately
+        if (readinessResult.data.project && typeof readinessResult.data.project !== 'string') {
+          setProject(readinessResult.data.project as Project);
+          console.log('✅ Updated project data:', readinessResult.data.project);
+        }
+  
         if (!readinessResult.data.ready) {
           setError(readinessResult.data.reason || 'Project not ready for contributions');
           setProjectReady(false);
@@ -123,16 +130,29 @@ export default function ContributionModal({
         }
   
         setProjectReady(true);
-        
-        if (readinessResult.data.project && typeof readinessResult.data.project !== 'string') {
-          setProject(readinessResult.data.project);
-        }
   
+        // ✅ Now fetch contribution info with fresh project data
         const infoResult = await contributionApi.getProjectContributionInfo(initialProject._id);
         
         if (infoResult.success && infoResult.data) {
           setContributionInfo(infoResult.data);
           console.log('📊 Contribution Info:', infoResult.data);
+          
+          // ✅ Double-check if project is fully funded
+          if (infoResult.data.isFullyFunded) {
+            setError('🎉 This project is fully funded! Goal reached.');
+            setProjectReady(false);
+            toast({
+              title: 'Project Fully Funded!',
+              description: 'This project has reached its funding goal.',
+              status: 'success',
+              duration: 5000,
+              isClosable: true,
+            });
+            setStep('input');
+            setLoadingInfo(false);
+            return;
+          }
           
           // Project is ready, move to input step
           setStep('input');
@@ -140,22 +160,27 @@ export default function ContributionModal({
           throw new Error(infoResult.error || 'Failed to load contribution details');
         }
       } catch (error: unknown) {
-        console.error('Failed to fetch contribution info:', error);
+        console.error('❌ Failed to check project:', error);
         
-        // IMPROVED: Better error messages
         let errorMessage = error instanceof Error ? error.message : 'Failed to load contribution details';
         
+        // Better error messages
         if (errorMessage.includes('fully funded') || errorMessage.includes('completed')) {
           errorMessage = '🎉 This project is fully funded! Goal reached and funds released to farmer.';
+        } else if (errorMessage.includes('not yet deployed')) {
+          errorMessage = '⏳ Project is being deployed to blockchain. Please try again in a few minutes.';
+        } else if (errorMessage.includes('not active')) {
+          errorMessage = '⚠️ Project is not currently active for contributions.';
         }
         
         setError(errorMessage);
+        setProjectReady(false);
         setStep('input');
         
         toast({
-          title: errorMessage.includes('🎉') ? 'Project Fully Funded!' : 'Error',
+          title: errorMessage.includes('🎉') ? 'Project Fully Funded!' : 'Cannot Accept Contributions',
           description: errorMessage,
-          status: errorMessage.includes('🎉') ? 'success' : 'error',
+          status: errorMessage.includes('🎉') ? 'success' : 'warning',
           duration: 7000,
           isClosable: true,
         });
@@ -165,6 +190,7 @@ export default function ContributionModal({
     };
   
     if (isOpen) {
+      // ✅ Reset all state when modal opens
       checkProjectAndFetchInfo();
       setAmountMatic('');
       setTxHash('');

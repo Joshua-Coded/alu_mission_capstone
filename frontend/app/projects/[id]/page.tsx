@@ -965,17 +965,23 @@ const fetchProject = useCallback(async (id: string) => {
 
         {/* Contribution Modal */}
         {project && (
-          <ContributionModal
-            isOpen={isOpen}
-            onClose={onClose}
-            project={project as Project} 
-            onSuccess={() => {
-              if (params.id) {
-                fetchProject(params.id as string);
-              }
-              onClose();
-            }}
-          />
+         <ContributionModal
+         isOpen={isOpen}
+         onClose={onClose}
+         project={project as Project} 
+         onSuccess={() => {
+           if (params.id) {
+             fetchProject(params.id as string); 
+           }
+           toast({
+             title: 'Contribution Successful!',
+             description: 'Your contribution has been recorded',
+             status: 'success',
+             duration: 3000,
+           });
+           onClose();
+         }}
+       />
         )}
       </Box>
     </RouteGuard>
