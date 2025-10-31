@@ -1,5 +1,8 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+import { AxiosError, AxiosInstance } from "axios";
+import { apiClient } from "./api";
 import { Project } from "./projectApi";
+
+// lib/contributionApi.ts
 
 // ============= TYPES & INTERFACES =============
 
@@ -18,8 +21,6 @@ export interface Contribution {
     blockchainProjectId?: number;
     farmerWalletAddress?: string;
   };
-
-
   contributor: {
     _id: string;
     firstName: string;
@@ -205,66 +206,11 @@ export const BLOCKCHAIN_CONSTANTS = {
 
 class ContributionApiClient {
   private api: AxiosInstance;
-  private baseURL: string;
 
-  constructor(baseURL: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1') {
-    this.baseURL = baseURL;
-    
-    this.api = axios.create({
-      baseURL: this.baseURL,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    this.api.interceptors.request.use(
-      (config) => {
-        const token = this.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    this.api.interceptors.response.use(
-      (response) => response,
-      (error: AxiosError<{ message?: string }>) => {
-        if (error.response?.status === 401) {
-          this.clearToken();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
-          }
-        }
-        
-        const errorData = error.response?.data;
-        const errorMessage = errorData?.message || error.message || 'Network error occurred';
-        return Promise.reject(new Error(errorMessage));
-      }
-    );
-  }
-
-  private getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      return localStorage.getItem('authToken');
-    } catch {
-      return null;
-    }
-  }
-
-  private clearToken(): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.removeItem('authToken');
-      sessionStorage.removeItem('authToken');
-    } catch {
-      console.error('Error clearing token');
-    }
+  constructor() {
+    // Use the shared apiClient from your main api.ts file
+    // This ensures consistent base URL, interceptors, and error handling
+    this.api = apiClient;
   }
 
   // ============= BLOCKCHAIN TRANSACTION HELPERS =============
@@ -376,7 +322,7 @@ class ContributionApiClient {
     blockchainInfo?: unknown;
   }>> {
     try {
-      const projectResponse = await this.api.get(`${this.baseURL}/projects/${projectId}`);
+      const projectResponse = await this.api.get(`${this.api.defaults.baseURL}/projects/${projectId}`);
       const project = projectResponse.data;
 
       if (!['active', 'verified'].includes(project.status)) {
@@ -564,36 +510,36 @@ class ContributionApiClient {
     }
   }
 
-async recordContributionAfterTransaction(
-  projectId: string, 
-  amount: number, 
-  transactionHash: string,
-  contributorWallet: string,
-  metadata?: { anonymous?: boolean; notes?: string } 
-): Promise<ApiResponse<Contribution>> {
-  try {
-    const contribution = await this.createContribution({
-      projectId,
-      amount,
-      currency: 'MATIC',
-      paymentMethod: 'blockchain',
-      transactionHash,
-      contributorWallet, 
-      metadata: {
-        anonymous: metadata?.anonymous || false,
-        notes: metadata?.notes
-      }
-    });
+  async recordContributionAfterTransaction(
+    projectId: string, 
+    amount: number, 
+    transactionHash: string,
+    contributorWallet: string,
+    metadata?: { anonymous?: boolean; notes?: string } 
+  ): Promise<ApiResponse<Contribution>> {
+    try {
+      const contribution = await this.createContribution({
+        projectId,
+        amount,
+        currency: 'MATIC',
+        paymentMethod: 'blockchain',
+        transactionHash,
+        contributorWallet, 
+        metadata: {
+          anonymous: metadata?.anonymous || false,
+          notes: metadata?.notes
+        }
+      });
 
-    return contribution;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to record contribution';
-    return {
-      success: false,
-      error: errorMessage
-    };
+      return contribution;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to record contribution';
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
   }
-}
 
   async getContribution(contributionId: string): Promise<ApiResponse<Contribution>> {
     try {
@@ -620,191 +566,191 @@ async recordContributionAfterTransaction(
     }
   }
 
-async getMyStats(): Promise<ApiResponse<ContributionStats>> {
-  try {
-    const response = await this.api.get<ContributionStats>('/contributions/my-stats');
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch statistics';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async getMyStats(): Promise<ApiResponse<ContributionStats>> {
+    try {
+      const response = await this.api.get<ContributionStats>('/contributions/my-stats');
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch statistics';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async getNetworkInfo(): Promise<ApiResponse<NetworkInfo>> {
-  try {
-    const response = await this.api.get('/contributions/polygon/network-info');
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch network info';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async getNetworkInfo(): Promise<ApiResponse<NetworkInfo>> {
+    try {
+      const response = await this.api.get('/contributions/polygon/network-info');
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch network info';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async confirmContribution(
-  contributionId: string,
-  data: ConfirmContributionDto
-): Promise<ApiResponse<Contribution>> {
-  try {
-    const response = await this.api.patch<Contribution>(
-      `/contributions/${contributionId}/confirm`, 
-      data
-    );
-    return {
-      success: true,
-      data: response.data,
-      message: 'Contribution confirmed successfully',
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to confirm contribution';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async confirmContribution(
+    contributionId: string,
+    data: ConfirmContributionDto
+  ): Promise<ApiResponse<Contribution>> {
+    try {
+      const response = await this.api.patch<Contribution>(
+        `/contributions/${contributionId}/confirm`, 
+        data
+      );
+      return {
+        success: true,
+        data: response.data,
+        message: 'Contribution confirmed successfully',
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to confirm contribution';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async getMyContributions(
-  page: number = 1,
-  limit: number = 10,
-  status?: string
-): Promise<ApiResponse<{
-  contributions: Contribution[];
-  total: number;
-  page: number;
-  pages: number;
-  totalMatic: number;
-}>> {
-  try {
-    const params: Record<string, string> = {
-      page: page.toString(),
-      limit: limit.toString(),
-    };
-    if (status) params.status = status;
+  async getMyContributions(
+    page: number = 1,
+    limit: number = 10,
+    status?: string
+  ): Promise<ApiResponse<{
+    contributions: Contribution[];
+    total: number;
+    page: number;
+    pages: number;
+    totalMatic: number;
+  }>> {
+    try {
+      const params: Record<string, string> = {
+        page: page.toString(),
+        limit: limit.toString(),
+      };
+      if (status) params.status = status;
 
-    const response = await this.api.get('/contributions/my-contributions', { params });
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch contributions';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+      const response = await this.api.get('/contributions/my-contributions', { params });
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch contributions';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async getProjectContributions(projectId: string): Promise<ApiResponse<ProjectContributions>> {
-  try {
-    const response = await this.api.get<ProjectContributions>(
-      `/contributions/project/${projectId}/contributions`
-    );
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch project contributions';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async getProjectContributions(projectId: string): Promise<ApiResponse<ProjectContributions>> {
+    try {
+      const response = await this.api.get<ProjectContributions>(
+        `/contributions/project/${projectId}/contributions`
+      );
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch project contributions';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async getPlatformStats(): Promise<ApiResponse<PlatformStats>> {
-  try {
-    const response = await this.api.get<PlatformStats>('/contributions/stats/platform');
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch platform statistics';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async getPlatformStats(): Promise<ApiResponse<PlatformStats>> {
+    try {
+      const response = await this.api.get<PlatformStats>('/contributions/stats/platform');
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch platform statistics';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async verifyTransaction(txHash: string): Promise<ApiResponse<{
-  transactionHash: string;
-  network: string;
-  chainId: number;
-  polygonscanLink: string;
-  message: string;
-  status: 'success' | 'pending' | 'failed';
-  blockNumber?: number;
-  confirmations?: number;
-}>> {
-  try {
-    const response = await this.api.get(`/contributions/polygon/verify-transaction/${txHash}`);
-    return {
-      success: true,
-      data: response.data,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to verify transaction';
-    const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
-    
-    return {
-      success: false,
-      error: errorMessage,
-      statusCode: statusCode,
-    };
+  async verifyTransaction(txHash: string): Promise<ApiResponse<{
+    transactionHash: string;
+    network: string;
+    chainId: number;
+    polygonscanLink: string;
+    message: string;
+    status: 'success' | 'pending' | 'failed';
+    blockNumber?: number;
+    confirmations?: number;
+  }>> {
+    try {
+      const response = await this.api.get(`/contributions/polygon/verify-transaction/${txHash}`);
+      return {
+        success: true,
+        data: response.data,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to verify transaction';
+      const statusCode = error instanceof AxiosError ? error.response?.status : undefined;
+      
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode,
+      };
+    }
   }
-}
 
-async testConnection(): Promise<ApiResponse<{ message: string; timestamp: string }>> {
-  try {
-    await this.api.get('/health'); 
-    return {
-      success: true,
-      data: {
-        message: 'Contribution API connected successfully',
-        timestamp: new Date().toISOString()
-      }
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Contribution API connection failed';
-    return {
-      success: false,
-      error: errorMessage
-    };
+  async testConnection(): Promise<ApiResponse<{ message: string; timestamp: string }>> {
+    try {
+      await this.api.get('/health'); 
+      return {
+        success: true,
+        data: {
+          message: 'Contribution API connected successfully',
+          timestamp: new Date().toISOString()
+        }
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Contribution API connection failed';
+      return {
+        success: false,
+        error: errorMessage
+      };
+    }
   }
-}
 
   // ============= HELPER METHODS =============
 
@@ -864,34 +810,34 @@ async testConnection(): Promise<ApiResponse<{ message: string; timestamp: string
     return BLOCKCHAIN_CONSTANTS.CONTRACT_ADDRESS;
   }
 
-async hasUserContributed(projectId: string): Promise<ApiResponse<{ hasContributed: boolean; contributions?: Contribution[] }>> {
-  try {
-    const myContributions = await this.getMyContributions(1, 100);
-    if (!myContributions.success) {
+  async hasUserContributed(projectId: string): Promise<ApiResponse<{ hasContributed: boolean; contributions?: Contribution[] }>> {
+    try {
+      const myContributions = await this.getMyContributions(1, 100);
+      if (!myContributions.success) {
+        return {
+          success: false,
+          error: myContributions.error
+        };
+      }
+
+      const projectContributions = myContributions.data?.contributions.filter(
+        contribution => contribution.project._id === projectId
+      ) || [];
+
+      return {
+        success: true,
+        data: {
+          hasContributed: projectContributions.length > 0,
+          contributions: projectContributions
+        }
+      };
+    } catch {
       return {
         success: false,
-        error: myContributions.error
+        error: 'Failed to check contribution status'
       };
     }
-
-    const projectContributions = myContributions.data?.contributions.filter(
-      contribution => contribution.project._id === projectId
-    ) || [];
-
-    return {
-      success: true,
-      data: {
-        hasContributed: projectContributions.length > 0,
-        contributions: projectContributions
-      }
-    };
-  } catch {
-    return {
-      success: false,
-      error: 'Failed to check contribution status'
-    };
   }
-}
 
   getCurrentNetwork(): NetworkInfo {
     return {

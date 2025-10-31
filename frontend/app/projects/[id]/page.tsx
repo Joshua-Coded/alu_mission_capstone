@@ -49,6 +49,8 @@ import {
   FiExternalLink,
   FiUsers,
   FiRefreshCw,
+  FiDollarSign,
+  FiDatabase,
 } from 'react-icons/fi';
 
 // Create a separate component for ContributionCard to fix hook-in-callback error
@@ -62,8 +64,6 @@ const ContributionCard = ({ contribution, index }: { contribution: Contribution;
   
   const amount = contribution.amountMatic || contribution.amount || 0;
   const date = contribution.contributedAt || contribution.createdAt;
-  
-
   
   // Safe date formatting
   let formattedDate = 'Invalid Date';
@@ -156,38 +156,13 @@ export default function ProjectDetailsPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
-  
-  // interface BlockchainData {
-  //   currentFunding: string;
-  //   fundingGoal: string;
-  //   isFullyFunded: boolean;
-  //   isActive: boolean;
-  //   contractAddress: string;
-  //   farmerWalletAddress: string;
-  //   blockchainProjectId: number;
-  //   lastUpdated: string;
-  
-  //   contributorCount?: number;
-  //   fundingDeadline?: string;
-  //   instructions?: {
-  //     step1: string;
-  //     step2: string;
-  //     step3: string;
-  //     step4: string;
-  //   };
-  //   minContribution?: number;
-  //   maxContribution?: number;
-  // }
-
-  // const [blockchainData, setBlockchainData] = useState<BlockchainData | null>(null);
   const [blockchainData, setBlockchainData] = useState<ProjectContributionInfo | null>(null);
   const [loadingBlockchain, setLoadingBlockchain] = useState(false);
   const [contributions, setContributions] = useState<Contribution[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<string>('');
+  // const [lastUpdated] = useState<string>('');
   
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  // Move ALL useColorModeValue hooks to the top - unconditionally
   const bgColor = useColorModeValue('gray.50', 'gray.900');
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
@@ -195,8 +170,9 @@ export default function ProjectDetailsPage() {
   const blockchainCardBg = useColorModeValue('purple.50', 'purple.900');
   const farmerCardBg = useColorModeValue('green.50', 'green.900');
   const fundingCardBg = useColorModeValue('blue.50', 'blue.900');
+  const textColor = useColorModeValue('gray.600', 'gray.400');
 
-  // Fix: Wrap all functions in useCallback to prevent infinite re-renders
+  // Wrap all functions in useCallback to prevent infinite re-renders
   const fetchBlockchainData = useCallback(async (projectId: string) => {
     try {
       setLoadingBlockchain(true);
@@ -214,10 +190,9 @@ export default function ProjectDetailsPage() {
 
   const fetchContributions = useCallback(async (projectId: string) => {
     try {
-      // Use the correct API endpoint
       const result = await contributionApi.getProjectContributions(projectId);
       
-      console.log('📊 Contributions Result:', result); // Debug log
+      console.log('📊 Contributions Result:', result);
       
       if (result.success && result.data) {
         console.log('✅ Contributions:', result.data.contributions);
@@ -235,9 +210,9 @@ export default function ProjectDetailsPage() {
       console.error('❌ Failed to fetch contributions:', error);
       setContributions([]);
     }
-  }, [project]); // ✅ Added project dependency since it's used in the function
+  }, [project]);
 
-  // Fix: Wrap fetchProject in useCallback with all dependencies
+  // Wrap fetchProject in useCallback with all dependencies
   const fetchProject = useCallback(async (id: string) => {
     try {
       setLoading(true);
@@ -249,9 +224,6 @@ export default function ProjectDetailsPage() {
         await fetchBlockchainData(id);
         await fetchContributions(id);
       }
-      
-      // Update last updated timestamp
-      setLastUpdated(new Date().toISOString());
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to load project';
       toast({
@@ -264,14 +236,13 @@ export default function ProjectDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast, fetchBlockchainData, fetchContributions]); // ✅ Added all dependencies
+  }, [toast, fetchBlockchainData, fetchContributions]);
 
   const checkIfFavorite = useCallback(async (id: string) => {
     try {
       const result = await projectApi.isFavorite(id);
       setIsFavorite(result.isFavorite);
     } catch (error) {
-      // Ignore error - remove unused 'err' variable
       console.error('Failed to check favorite status:', error);
     }
   }, []);
@@ -281,7 +252,7 @@ export default function ProjectDetailsPage() {
       fetchProject(params.id as string);
       checkIfFavorite(params.id as string);
     }
-  }, [params.id, fetchProject, checkIfFavorite]); // Now all functions are stable due to useCallback
+  }, [params.id, fetchProject, checkIfFavorite]);
 
   const toggleFavorite = async () => {
     if (!project) return;
@@ -316,7 +287,6 @@ export default function ProjectDetailsPage() {
 
   const formatMatic = (amount: string | number) => {
     if (typeof amount === 'string' && amount.includes('.')) {
-      // Already formatted, return as is
       return amount;
     }
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -324,25 +294,7 @@ export default function ProjectDetailsPage() {
     return num.toFixed(4);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'Just now';
-    
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // formatDate function since it was unused
 
   const calculateProgress = () => {
     if (!blockchainData) {
@@ -411,6 +363,27 @@ export default function ProjectDetailsPage() {
   const currentFunding = getCurrentFunding();
   const fundingGoal = getFundingGoal();
 
+  // Get status color and label like the farmer modal
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      submitted: 'orange',
+      under_review: 'yellow',
+      active: 'green',
+      rejected: 'red',
+      funded: 'purple',
+      closed: 'gray',
+    };
+    return colors[status] || 'gray';
+  };
+
+  const getStatusLabel = (status: string) => {
+    return status.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
+  const isOnBlockchain = project.blockchainStatus === 'created';
+
   return (
     <RouteGuard allowedRoles={['INVESTOR', 'FARMER', 'GOVERNMENT_OFFICIAL']}>
       <Box minH="100vh" bg={bgColor} py={8}>
@@ -474,151 +447,165 @@ export default function ProjectDetailsPage() {
               </AspectRatio>
             )}
 
-            {/* Project Header */}
+            {/* Project Header - Improved like farmer modal */}
             <Box>
-              <HStack spacing={4} mb={2} flexWrap="wrap">
-                <Badge colorScheme="green" fontSize="sm" px={3} py={1}>
-                  {project.category.replace(/_/g, ' ')}
-                </Badge>
-                <Badge 
-                  colorScheme={isFullyFunded ? 'purple' : project.status === 'active' ? 'blue' : 'gray'} 
-                  fontSize="sm" 
-                  px={3} 
-                  py={1}
-                >
-                  {isFullyFunded ? '🎉 FULLY FUNDED' : project.status.toUpperCase()}
-                </Badge>
-                {project.verification?.verifiedBy && (
-                  <Badge colorScheme="green" fontSize="sm" px={3} py={1}>
-                    <HStack spacing={1}>
-                      <Icon as={FiCheckCircle} />
-                      <Text>Verified</Text>
-                    </HStack>
-                  </Badge>
+              <HStack spacing={3} mb={4} wrap="wrap">
+                <Text fontSize="2xl" fontWeight="bold">{project.title}</Text>
+                {project && (
+                  <>
+                    <Badge colorScheme={getStatusColor(project.status)} fontSize="sm" px={3} py={1}>
+                      {getStatusLabel(project.status)}
+                    </Badge>
+                    {isOnBlockchain && (
+                      <Badge colorScheme="blue" fontSize="sm" px={3} py={1}>
+                        <HStack spacing={1}>
+                          <Icon as={FiDatabase} boxSize={3} />
+                          <Text>On Blockchain</Text>
+                        </HStack>
+                      </Badge>
+                    )}
+                  </>
                 )}
               </HStack>
-
-              <Heading size="2xl" mb={4}>{project.title}</Heading>
+              <HStack spacing={4} fontSize="sm" color={textColor} mb={4}>
+                <HStack>
+                  <Icon as={FiMapPin} />
+                  <Text>{project.location}</Text>
+                </HStack>
+                <HStack>
+                  <Icon as={FiCalendar} />
+                  <Text>{project.timeline}</Text>
+                </HStack>
+                <HStack>
+                  <Icon as={FiDollarSign} />
+                  <Text>{project.category.replace(/_/g, ' ')}</Text>
+                </HStack>
+              </HStack>
               <Text fontSize="lg" color="gray.600" lineHeight="tall" whiteSpace="pre-wrap">
                 {project.description}
               </Text>
             </Box>
 
-           {/* Funding Progress Card */}
-{isFullyFunded ? (
-  <Card bg={cardBg} borderWidth="2px" borderColor="purple.300" shadow="lg">
-    <CardBody>
-      {blockchainData ? (
-        <ProjectSuccessView
-          project={project}
-          blockchainData={{
-            currentFunding: blockchainData.currentFunding,
-            fundingGoal: blockchainData.fundingGoal,
-            contributorCount: blockchainData.contributorCount,
-            isFullyFunded: blockchainData.isFullyFunded
-          }}
-        />
-      ) : (
-        <VStack spacing={4} py={8}>
-          <Icon as={FiCheckCircle} boxSize={12} color="green.500" />
-          <Text fontSize="xl" fontWeight="bold" color="green.600">
-            🎉 Project Fully Funded!
-          </Text>
-          <Text color="gray.600" textAlign="center">
-            This project has reached its funding goal.
-            {loadingBlockchain ? ' Loading blockchain data...' : ' Waiting for blockchain confirmation.'}
-          </Text>
-          {loadingBlockchain && (
-            <Spinner size="md" color="green.500" />
-          )}
-        </VStack>
-      )}
-    </CardBody>
-  </Card>
-) : (
-  <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
-    <CardBody>
-      <VStack spacing={4} align="stretch">
-        <HStack justify="space-between">
-          <Text fontSize="lg" fontWeight="semibold">Funding Progress</Text>
-          <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
-            {progress.toFixed(1)}% Funded
-          </Badge>
-        </HStack>
+            {/* Funding Progress Card - Improved like farmer modal */}
+            {isFullyFunded ? (
+              <Card bg={cardBg} borderWidth="2px" borderColor="purple.300" shadow="lg">
+                <CardBody>
+                  {blockchainData ? (
+                    <ProjectSuccessView
+                      project={project}
+                      blockchainData={{
+                        currentFunding: blockchainData.currentFunding,
+                        fundingGoal: blockchainData.fundingGoal,
+                        contributorCount: blockchainData.contributorCount,
+                        isFullyFunded: blockchainData.isFullyFunded
+                      }}
+                    />
+                  ) : (
+                    <VStack spacing={4} py={8}>
+                      <Icon as={FiCheckCircle} boxSize={12} color="green.500" />
+                      <Text fontSize="xl" fontWeight="bold" color="green.600">
+                        🎉 Project Fully Funded!
+                      </Text>
+                      <Text color="gray.600" textAlign="center">
+                        This project has reached its funding goal.
+                        {loadingBlockchain ? ' Loading blockchain data...' : ' Waiting for blockchain confirmation.'}
+                      </Text>
+                      {loadingBlockchain && (
+                        <Spinner size="md" color="green.500" />
+                      )}
+                    </VStack>
+                  )}
+                </CardBody>
+              </Card>
+            ) : (
+              <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+                <CardBody>
+                  <VStack spacing={4} align="stretch">
+                    <Text fontWeight="bold" mb={3} fontSize="lg" color="green.600">
+                      Funding Progress
+                    </Text>
+                    <VStack spacing={3} align="stretch">
+                      <HStack justify="space-between">
+                        <Text fontSize="sm" color={textColor}>Current / Goal</Text>
+                        <HStack spacing={2}>
+                          <Text fontSize="lg" fontWeight="bold" color="purple.600">
+                            {formatMatic(currentFunding)}
+                          </Text>
+                          <Text fontSize="md" color="purple.500">/</Text>
+                          <Text fontSize="lg" fontWeight="bold" color="green.600">
+                            {formatMatic(fundingGoal)}
+                          </Text>
+                          <Text fontSize="md" fontWeight="bold" color="purple.500">MATIC</Text>
+                        </HStack>
+                      </HStack>
+                      <Progress 
+                        value={progress} 
+                        colorScheme="green" 
+                        size="lg" 
+                        borderRadius="full"
+                      />
+                      <HStack justify="space-between">
+                        <Text fontSize="sm" color={textColor}>
+                          {progress.toFixed(1)}% funded
+                        </Text>
+                        <Badge colorScheme={progress >= 100 ? 'green' : 'blue'}>
+                          {progress >= 100 ? 'Fully Funded' : 'In Progress'}
+                        </Badge>
+                      </HStack>
+                    </VStack>
 
-        <Progress
-          value={progress}
-          size="lg"
-          colorScheme="green"
-          borderRadius="full"
-          hasStripe
-          isAnimated
-        />
+                    {/* Key Stats like farmer modal */}
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mt={4}>
+                      <Card bg={overviewCardBg} p={3}>
+                        <VStack spacing={1}>
+                          <Text fontSize="xs" color={textColor}>Funding Goal</Text>
+                          <Text fontSize="lg" fontWeight="bold" color="green.600">
+                            {formatMatic(fundingGoal)}
+                          </Text>
+                          <Text fontSize="xs" color="purple.500">MATIC</Text>
+                        </VStack>
+                      </Card>
+                      <Card bg={overviewCardBg} p={3}>
+                        <VStack spacing={1}>
+                          <Text fontSize="xs" color={textColor}>Current Funding</Text>
+                          <Text fontSize="lg" fontWeight="bold" color="purple.600">
+                            {formatMatic(currentFunding)}
+                          </Text>
+                          <Text fontSize="xs" color="purple.500">MATIC</Text>
+                        </VStack>
+                      </Card>
+                      <Card bg={overviewCardBg} p={3}>
+                        <VStack spacing={1}>
+                          <Text fontSize="xs" color={textColor}>Contributors</Text>
+                          <Text fontSize="xl" fontWeight="bold">{contributions.length}</Text>
+                        </VStack>
+                      </Card>
+                      <Card bg={overviewCardBg} p={3}>
+                        <VStack spacing={1}>
+                          <Text fontSize="xs" color={textColor}>Progress</Text>
+                          <Text fontSize="xl" fontWeight="bold" color="purple.600">
+                            {Math.round(progress)}%
+                          </Text>
+                        </VStack>
+                      </Card>
+                    </SimpleGrid>
 
-        <HStack justify="space-between">
-          <VStack align="start" spacing={0}>
-            <Text fontSize="sm" color="gray.600">Raised</Text>
-            <HStack spacing={1}>
-              <Text fontSize="2xl" fontWeight="bold" color="purple.600">
-                {formatMatic(currentFunding)}
-              </Text>
-              <Text fontSize="lg" fontWeight="bold" color="purple.500">MATIC</Text>
-            </HStack>
-            <Text fontSize="xs" color="gray.500" mt={1}>
-              {/* Updated: {formatDate(blockchainData?.lastUpdated || lastUpdated)} */}
-            </Text>
-          </VStack>
+                    <Button
+                      colorScheme="green"
+                      size="lg"
+                      w="full"
+                      onClick={onOpen}
+                      isDisabled={progress >= 100 || !blockchainData?.isActive}
+                      mt={4}
+                    >
+                      {progress >= 100 ? 'Fully Funded' : 'Invest in This Project'}
+                    </Button>
+                  </VStack>
+                </CardBody>
+              </Card>
+            )}
 
-          <VStack align="end" spacing={0}>
-            <Text fontSize="sm" color="gray.600">Goal</Text>
-            <HStack spacing={1}>
-              <Text fontSize="2xl" fontWeight="bold">
-                {formatMatic(fundingGoal)}
-              </Text>
-              <Text fontSize="lg" fontWeight="bold" color="gray.600">MATIC</Text>
-            </HStack>
-          </VStack>
-        </HStack>
-
-        {blockchainData && (
-          <VStack spacing={2} pt={2}>
-            <HStack justify="space-between" w="full" fontSize="sm">
-              <Text color="gray.600">Contributors:</Text>
-              <HStack>
-                <Icon as={FiUsers} color="blue.500" />
-                <Text fontWeight="bold">{contributions.length}</Text>
-              </HStack>
-            </HStack>
-            <HStack justify="space-between" w="full" fontSize="sm">
-              <Text color="gray.600">Blockchain Status:</Text>
-              <Badge colorScheme={blockchainData.isActive ? 'green' : 'gray'}>
-                {blockchainData.isActive ? 'Active' : 'Inactive'}
-              </Badge>
-            </HStack>
-            <HStack justify="space-between" w="full" fontSize="sm">
-              <Text color="gray.600">Last Updated:</Text>
-              <Text fontSize="xs" color="gray.500">
-                {/* {formatDate(blockchainData.lastUpdated)} */}
-              </Text>
-            </HStack>
-          </VStack>
-        )}
-
-        <Button
-          colorScheme="green"
-          size="lg"
-          w="full"
-          onClick={onOpen}
-          isDisabled={progress >= 100 || !blockchainData?.isActive}
-        >
-          {progress >= 100 ? 'Fully Funded' : 'Invest in This Project'}
-        </Button>
-      </VStack>
-    </CardBody>
-  </Card>
-)}
-
-            {/* Tabs Section */}
+            {/* Rest of your existing tabs and content remains the same */}
             <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
               <CardBody>
                 <Tabs colorScheme={isFullyFunded ? "purple" : "green"}>
@@ -630,7 +617,7 @@ export default function ProjectDetailsPage() {
                   </TabList>
 
                   <TabPanels>
-                    {/* Overview Tab */}
+                    {/* Overview Tab - Keep your existing content */}
                     <TabPanel px={0} pt={6}>
                       <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                         <Card bg={overviewCardBg}>
@@ -708,162 +695,249 @@ export default function ProjectDetailsPage() {
                       </SimpleGrid>
                     </TabPanel>
 
-                    {/* Blockchain Info Tab */}
-                    <TabPanel px={0} pt={6}>
-                      {blockchainData ? (
-                        <VStack spacing={4} align="stretch">
-                          <Card bg={blockchainCardBg}>
-                            <CardBody>
-                              <VStack align="start" spacing={3}>
-                                <Heading size="sm">Smart Contract</Heading>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Contract Address:</Text>
-                                  <Link
-                                    href={`https://polygonscan.com/address/${blockchainData.contractAddress}`}
-                                    isExternal
-                                    color="blue.600"
-                                    display="flex"
-                                    alignItems="center"
-                                    gap={1}
-                                  >
-                                    <Code fontSize="xs">{blockchainData.contractAddress.slice(0, 10)}...</Code>
-                                    <Icon as={FiExternalLink} />
-                                  </Link>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Project ID:</Text>
-                                  <Badge colorScheme="purple">{blockchainData.blockchainProjectId}</Badge>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Last Updated:</Text>
-                                  <Text fontSize="sm" color="gray.500">
-                                    {/* {formatDate(blockchainData.lastUpdated)} */}
-                                  </Text>
-                                </HStack>
-                              </VStack>
-                            </CardBody>
-                          </Card>
+                    <Card bg={cardBg} borderWidth="1px" borderColor={borderColor}>
+  <CardBody>
+    <Tabs colorScheme={isFullyFunded ? "purple" : "green"}>
+      <TabList>
+        <Tab>Overview</Tab>
+        <Tab>Blockchain Info</Tab>
+        <Tab>Contributors ({contributions.length})</Tab>
+        {project.verification?.verifiedBy && <Tab>Verification</Tab>}
+      </TabList>
 
-                          <Card bg={farmerCardBg}>
-                            <CardBody>
-                              <VStack align="start" spacing={3}>
-                                <Heading size="sm">Farmer&#39;s Wallet</Heading>
-                                <Text fontSize="sm" color="gray.600">
-                                  Funds will {isFullyFunded ? 'have been' : 'be'} automatically released to:
-                                </Text>
-                                <Link
-                                  href={`https://polygonscan.com/address/${blockchainData.farmerWalletAddress}`}
-                                  isExternal
-                                  color="green.600"
-                                  display="flex"
-                                  alignItems="center"
-                                  gap={2}
-                                >
-                                  <Code fontSize="xs" colorScheme="green">{blockchainData.farmerWalletAddress}</Code>
-                                  <Icon as={FiExternalLink} />
-                                </Link>
-                              </VStack>
-                            </CardBody>
-                          </Card>
+      <TabPanels>
+        {/* Overview Tab */}
+        <TabPanel px={0} pt={6}>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+            <Card bg={overviewCardBg}>
+              <CardBody>
+                <VStack spacing={4} align="stretch">
+                  <Heading size="sm" mb={2}>Project Details</Heading>
+                  
+                  <HStack>
+                    <Icon as={FiMapPin} color="blue.500" boxSize={5} />
+                    <VStack align="start" spacing={0}>
+                      <Text fontSize="sm" color="gray.600">Location</Text>
+                      <Text fontWeight="semibold">{project.location}</Text>
+                    </VStack>
+                  </HStack>
 
-                          <Card bg={fundingCardBg}>
-                            <CardBody>
-                              <VStack align="start" spacing={3}>
-                                <Heading size="sm">Funding Status</Heading>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Current Funding:</Text>
-                                  <Text fontSize="sm" fontWeight="bold" color="purple.600">
-                                    {formatMatic(blockchainData.currentFunding)} MATIC
-                                  </Text>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Funding Goal:</Text>
-                                  <Text fontSize="sm" fontWeight="bold">
-                                    {formatMatic(blockchainData.fundingGoal)} MATIC
-                                  </Text>
-                                </HStack>
-                                <HStack justify="space-between" w="full">
-                                  <Text fontSize="sm" color="gray.600">Progress:</Text>
-                                  <Badge colorScheme={isFullyFunded ? 'purple' : 'blue'}>
-                                    {progress.toFixed(1)}% Funded
-                                  </Badge>
-                                </HStack>
-                              </VStack>
-                            </CardBody>
-                          </Card>
-                        </VStack>
-                      ) : (
-                        <VStack spacing={4} py={8}>
-                          <Icon as={FiShield} boxSize={12} color="gray.400" />
-                          <Text color="gray.600">Project not yet deployed to blockchain</Text>
-                        </VStack>
+                  <Divider />
+
+                  <HStack>
+                    <Icon as={FiCalendar} color="blue.500" boxSize={5} />
+                    <VStack align="start" spacing={0}>
+                      <Text fontSize="sm" color="gray.600">Timeline</Text>
+                      <Text fontWeight="semibold">{project.timeline}</Text>
+                    </VStack>
+                  </HStack>
+
+                  <Divider />
+
+                  <HStack>
+                    <Icon as={FiUser} color="blue.500" boxSize={5} />
+                    <VStack align="start" spacing={0}>
+                      <Text fontSize="sm" color="gray.600">Category</Text>
+                      <Text fontWeight="semibold">{project.category.replace(/_/g, ' ')}</Text>
+                    </VStack>
+                  </HStack>
+                </VStack>
+              </CardBody>
+            </Card>
+
+            <Card bg={overviewCardBg}>
+              <CardBody>
+                <VStack spacing={4} align="stretch">
+                  <Heading size="sm" mb={2}>Farmer Information</Heading>
+                  
+                  {typeof project.farmer === 'object' && project.farmer ? (
+                    <VStack align="start" spacing={3}>
+                      <Box>
+                        <Text fontSize="sm" color="gray.600">Name</Text>
+                        <Text fontWeight="semibold">
+                          {project.farmer.firstName} {project.farmer.lastName}
+                        </Text>
+                      </Box>
+
+                      {project.farmer.email && (
+                        <Box>
+                          <Text fontSize="sm" color="gray.600">Email</Text>
+                          <Text fontWeight="semibold">{project.farmer.email}</Text>
+                        </Box>
                       )}
-                    </TabPanel>
 
-                    {/* Contributors Tab */}
-                    <TabPanel px={0} pt={6}>
-                      {contributions.length > 0 ? (
-                        <VStack spacing={3} align="stretch">
-                          {contributions.map((contribution: Contribution, index: number) => (
-                            <ContributionCard 
-                              key={contribution._id || index} 
-                              contribution={contribution} 
-                              index={index} 
-                            />
-                          ))}
-                        </VStack>
-                      ) : (
-                        <VStack spacing={4} py={12}>
-                          <Icon as={FiUsers} boxSize={12} color="gray.400" />
-                          <Text color="gray.600">No contributions yet</Text>
-                          <Text fontSize="sm" color="gray.500" textAlign="center">
-                            Be the first to support this project!
-                          </Text>
-                        </VStack>
+                      {project.farmerWalletAddress && (
+                        <Box>
+                          <Text fontSize="sm" color="gray.600">Wallet Address</Text>
+                          <Code fontSize="xs" colorScheme="green">
+                            {project.farmerWalletAddress.slice(0, 10)}...{project.farmerWalletAddress.slice(-8)}
+                          </Code>
+                        </Box>
                       )}
-                    </TabPanel>
+                    </VStack>
+                  ) : (
+                    <Text color="gray.500">Farmer information not available</Text>
+                  )}
+                </VStack>
+              </CardBody>
+            </Card>
+          </SimpleGrid>
+        </TabPanel>
 
-                    {/* Verification Tab */}
-                    {project.verification?.verifiedBy && (
-                      <TabPanel px={0} pt={6}>
-                        <Card bg="green.50" borderWidth="2px" borderColor="green.200">
-                          <CardBody>
-                            <VStack align="start" spacing={4}>
-                              <HStack>
-                                <Icon as={FiCheckCircle} color="green.600" boxSize={8} />
-                                <Box>
-                                  <Heading size="md" color="green.800">Verified Project</Heading>
-                                  <Text fontSize="sm" color="gray.600">Government verified and approved</Text>
-                                </Box>
-                              </HStack>
-                              <Divider />
-                              <VStack align="stretch" spacing={3} w="full">
-                                <HStack justify="space-between">
-                                  <Text fontSize="sm" color="gray.600">Verified By:</Text>
-                                  <Text fontSize="sm" fontWeight="medium">
-                                    {typeof project.verification.verifiedBy === 'string' 
-                                      ? project.verification.verifiedBy 
-                                      : `${project.verification.verifiedBy?.firstName || ''} ${project.verification.verifiedBy?.lastName || ''}`.trim() || 'Official'}
-                                  </Text>
-                                </HStack>
-                                {project.verification.verifiedAt && (
-                                  <HStack justify="space-between">
-                                    <Text fontSize="sm" color="gray.600">Date:</Text>
-                                    <Text fontSize="sm" fontWeight="medium">
-                                      {new Date(project.verification.verifiedAt).toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                      })}
-                                    </Text>
-                                  </HStack>
-                                )}
-                              </VStack>
-                            </VStack>
-                          </CardBody>
-                        </Card>
-                      </TabPanel>
+        {/* Blockchain Info Tab */}
+        <TabPanel px={0} pt={6}>
+          {blockchainData ? (
+            <VStack spacing={4} align="stretch">
+              <Card bg={blockchainCardBg}>
+                <CardBody>
+                  <VStack align="start" spacing={3}>
+                    <Heading size="sm">Smart Contract</Heading>
+                    <HStack justify="space-between" w="full">
+                      <Text fontSize="sm" color="gray.600">Contract Address:</Text>
+                      <Link
+                        href={`https://polygonscan.com/address/${blockchainData.contractAddress}`}
+                        isExternal
+                        color="blue.600"
+                        display="flex"
+                        alignItems="center"
+                        gap={1}
+                      >
+                        <Code fontSize="xs">{blockchainData.contractAddress.slice(0, 10)}...</Code>
+                        <Icon as={FiExternalLink} />
+                      </Link>
+                    </HStack>
+                    <HStack justify="space-between" w="full">
+                      <Text fontSize="sm" color="gray.600">Project ID:</Text>
+                      <Badge colorScheme="purple">{blockchainData.blockchainProjectId}</Badge>
+                    </HStack>
+                  </VStack>
+                </CardBody>
+              </Card>
+
+              <Card bg={farmerCardBg}>
+                <CardBody>
+                  <VStack align="start" spacing={3}>
+                  <Heading size="sm">Farmer&apos;s Wallet</Heading>
+                    <Text fontSize="sm" color="gray.600">
+                      Funds will {isFullyFunded ? 'have been' : 'be'} automatically released to:
+                    </Text>
+                    <Link
+                      href={`https://polygonscan.com/address/${blockchainData.farmerWalletAddress}`}
+                      isExternal
+                      color="green.600"
+                      display="flex"
+                      alignItems="center"
+                      gap={2}
+                    >
+                      <Code fontSize="xs" colorScheme="green">{blockchainData.farmerWalletAddress}</Code>
+                      <Icon as={FiExternalLink} />
+                    </Link>
+                  </VStack>
+                </CardBody>
+              </Card>
+
+              <Card bg={fundingCardBg}>
+                <CardBody>
+                  <VStack align="start" spacing={3}>
+                    <Heading size="sm">Funding Status</Heading>
+                    <HStack justify="space-between" w="full">
+                      <Text fontSize="sm" color="gray.600">Current Funding:</Text>
+                      <Text fontSize="sm" fontWeight="bold" color="purple.600">
+                        {formatMatic(blockchainData.currentFunding)} MATIC
+                      </Text>
+                    </HStack>
+                    <HStack justify="space-between" w="full">
+                      <Text fontSize="sm" color="gray.600">Funding Goal:</Text>
+                      <Text fontSize="sm" fontWeight="bold">
+                        {formatMatic(blockchainData.fundingGoal)} MATIC
+                      </Text>
+                    </HStack>
+                    <HStack justify="space-between" w="full">
+                      <Text fontSize="sm" color="gray.600">Progress:</Text>
+                      <Badge colorScheme={isFullyFunded ? 'purple' : 'blue'}>
+                        {progress.toFixed(1)}% Funded
+                      </Badge>
+                    </HStack>
+                  </VStack>
+                </CardBody>
+              </Card>
+            </VStack>
+          ) : (
+            <VStack spacing={4} py={8}>
+              <Icon as={FiShield} boxSize={12} color="gray.400" />
+              <Text color="gray.600">Project not yet deployed to blockchain</Text>
+            </VStack>
+          )}
+        </TabPanel>
+
+        {/* Contributors Tab */}
+        <TabPanel px={0} pt={6}>
+          {contributions.length > 0 ? (
+            <VStack spacing={3} align="stretch">
+              {contributions.map((contribution: Contribution, index: number) => (
+                <ContributionCard 
+                  key={contribution._id || index} 
+                  contribution={contribution} 
+                  index={index} 
+                />
+              ))}
+            </VStack>
+          ) : (
+            <VStack spacing={4} py={12}>
+              <Icon as={FiUsers} boxSize={12} color="gray.400" />
+              <Text color="gray.600">No contributions yet</Text>
+              <Text fontSize="sm" color="gray.500" textAlign="center">
+                Be the first to support this project!
+              </Text>
+            </VStack>
+          )}
+        </TabPanel>
+
+        {/* Verification Tab */}
+        {project.verification?.verifiedBy && (
+          <TabPanel px={0} pt={6}>
+            <Card bg="green.50" borderWidth="2px" borderColor="green.200">
+              <CardBody>
+                <VStack align="start" spacing={4}>
+                  <HStack>
+                    <Icon as={FiCheckCircle} color="green.600" boxSize={8} />
+                    <Box>
+                      <Heading size="md" color="green.800">Verified Project</Heading>
+                      <Text fontSize="sm" color="gray.600">Government verified and approved</Text>
+                    </Box>
+                  </HStack>
+                  <Divider />
+                  <VStack align="stretch" spacing={3} w="full">
+                    <HStack justify="space-between">
+                      <Text fontSize="sm" color="gray.600">Verified By:</Text>
+                      <Text fontSize="sm" fontWeight="medium">
+                        {typeof project.verification.verifiedBy === 'string' 
+                          ? project.verification.verifiedBy 
+                          : `${project.verification.verifiedBy?.firstName || ''} ${project.verification.verifiedBy?.lastName || ''}`.trim() || 'Official'}
+                      </Text>
+                    </HStack>
+                    {project.verification.verifiedAt && (
+                      <HStack justify="space-between">
+                        <Text fontSize="sm" color="gray.600">Date:</Text>
+                        <Text fontSize="sm" fontWeight="medium">
+                          {new Date(project.verification.verifiedAt).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </Text>
+                      </HStack>
                     )}
+                  </VStack>
+                </VStack>
+              </CardBody>
+            </Card>
+          </TabPanel>
+        )}
+      </TabPanels>
+    </Tabs>
+  </CardBody>
+</Card>
                   </TabPanels>
                 </Tabs>
               </CardBody>
@@ -873,18 +947,18 @@ export default function ProjectDetailsPage() {
 
         {/* Contribution Modal */}
         {project && (
-        <ContributionModal
-          isOpen={isOpen}
-          onClose={onClose}
-          project={project as Project} 
-          onSuccess={() => {
-            if (params.id) {
-              fetchProject(params.id as string);
-            }
-            onClose();
-          }}
-  />
-)}
+          <ContributionModal
+            isOpen={isOpen}
+            onClose={onClose}
+            project={project as Project} 
+            onSuccess={() => {
+              if (params.id) {
+                fetchProject(params.id as string);
+              }
+              onClose();
+            }}
+          />
+        )}
       </Box>
     </RouteGuard>
   );

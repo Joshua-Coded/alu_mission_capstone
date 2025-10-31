@@ -1,16 +1,55 @@
 import axios from "axios";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+// lib/api.ts
+
+// Smart base URL configuration
+const getBaseURL = () => {
+  // Server-side: use the URL from environment variables
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_API_URL || 'https://rootrise.onrender.com/api/v1';
+  }
+  
+  // Client-side logic:
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  if (isDevelopment) {
+    // Development: Use direct localhost connection (from your .env)
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+  } else {
+    // Production: Use proxy to avoid CORS between Vercel and Render
+    return '/api/backend';
+  }
+};
+
+const API_BASE_URL = getBaseURL();
+
+// Enhanced logging with environment info
+if (process.env.NEXT_PUBLIC_DEBUG_MODE === 'true') {
+  console.log('🔧 API Configuration:');
+  console.log('   - Environment:', process.env.NODE_ENV);
+  console.log('   - Base URL:', API_BASE_URL);
+  console.log('   - Using:', typeof window === 'undefined' ? 'Server-side' : 'Client-side');
+}
 
 // Create axios instance with interceptors
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: false,
 });
 
 // Add request interceptor to include auth token
 apiClient.interceptors.request.use(
   (config) => {
+    if (process.env.NEXT_PUBLIC_DEBUG_MODE === 'true') {
+      console.log('🚀 API Request:', {
+        url: config.url,
+        method: config.method,
+        baseURL: config.baseURL,
+        environment: process.env.NODE_ENV
+      });
+    }
+    
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('authToken');
       if (token) {
@@ -19,22 +58,63 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
+  (error: unknown) => {
     return Promise.reject(error);
   }
 );
 
-// Add response interceptor to handle auth errors
+// Add response interceptor to handle auth errors and CORS issues
 apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      console.error('Auth error - clearing token');
+  (response) => {
+    if (process.env.NEXT_PUBLIC_DEBUG_MODE === 'true') {
+      console.log('✅ API Response Success:', {
+        url: response.config.url,
+        status: response.status,
+        environment: process.env.NODE_ENV
+      });
+    }
+    return response;
+  },
+  (error: unknown) => {
+    const axiosError = error as { 
+      config?: { url?: string; baseURL?: string }; 
+      response?: { status?: number }; 
+      message?: string;
+      code?: string;
+    };
+    
+    const errorDetails = {
+      url: axiosError.config?.url,
+      status: axiosError.response?.status,
+      message: axiosError.message,
+      environment: process.env.NODE_ENV,
+      baseURL: axiosError.config?.baseURL
+    };
+    
+    console.error('❌ API Response Error:', errorDetails);
+    
+    // Handle CORS and network errors specifically
+    if (axiosError.code === 'NETWORK_ERROR' || axiosError.message?.includes('Network Error')) {
+      console.error('🌐 Network/CORS error detected - check if backend is running');
+    }
+    
+    if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
+      console.error('🔐 Auth error - clearing token');
       if (typeof window !== 'undefined') {
         localStorage.removeItem('authToken');
         localStorage.removeItem('auth_user');
+        // Only redirect if we're not already on login page
+        if (!window.location.pathname.includes('/auth/login')) {
+          window.location.href = '/auth/login';
+        }
       }
     }
+    
+    // Handle CORS preflight issues
+    if (axiosError.response?.status === 0) {
+      console.error('🚫 CORS preflight blocked - using proxy in production should fix this');
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -135,7 +215,6 @@ export interface ProfileResponse {
   department?: string;
   createdAt?: string;
   updatedAt?: string;
-  // Government official stats
   currentWorkload?: number;
   maxWorkload?: number;
   projectsReviewed?: number;
@@ -278,9 +357,18 @@ class ApiService {
     const response = await apiClient.get<ProfileResponse[]>(`/users/officials/available?${params}`);
     return response.data;
   }
+
+  // Health check method to test connection
+  async healthCheck(): Promise<{ status: string; timestamp: string; environment?: string }> {
+    const response = await apiClient.get('/health');
+    return response.data;
+  }
 }
 
 export const api = new ApiService();
+
+// Export the axios instance for direct use if needed
+export { apiClient };
 
 // Export default instance
 export default api;

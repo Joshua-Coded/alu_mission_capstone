@@ -1,4 +1,7 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+import { AxiosInstance } from "axios";
+import { apiClient } from "./api";
+
+// lib/projectApi.ts
 
 // ==================== TYPES & INTERFACES ====================
 
@@ -142,8 +145,7 @@ export interface DepartmentRecommendations {
   departmentOfficials: User[]; 
 }
 
-
-//  New interfaces based on backend analysis
+// New interfaces based on backend analysis
 export interface GovernmentDashboard {
   totalProjects: number;
   pendingReview: number;
@@ -176,7 +178,6 @@ export interface ProjectStats {
     funding: number;
   }>;
 }
-
 
 export interface CreateProjectDto {
   title: string;
@@ -226,8 +227,8 @@ export interface PlatformStats {
   rejectedProjects: number;
   averageProcessingTime: string;
   currency?: string;
-  totalContributors?: number; // ✅ ADDED: Missing field
-  successRate?: number; // ✅ ADDED: Missing field
+  totalContributors?: number;
+  successRate?: number;
 }
 
 export interface UploadResponse {
@@ -279,7 +280,6 @@ export interface CreateProjectResponse extends Project {
   message: string;
 }
 
-
 export interface DebugProjectInfo {
   id: string;
   title: string;
@@ -294,80 +294,11 @@ export interface DebugProjectInfo {
 
 class ProjectApiClient {
   private api: AxiosInstance;
-  private baseURL: string;
 
-  constructor(baseURL: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1') {
-    this.baseURL = baseURL;
-    this.api = axios.create({
-      baseURL: this.baseURL,
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    this.api.interceptors.request.use(
-      (config) => {
-        const token = this.getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
-
-    this.api.interceptors.response.use(
-      (response) => {
-        return response;
-      },
-      (error: AxiosError<ApiError>) => {
-        if (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
-          return Promise.reject(new Error('Unable to connect to server. Please check if the API server is running.'));
-        }
-        
-        if (error.response?.status === 401) {
-          this.clearToken();
-          if (typeof window !== 'undefined') {
-            window.location.href = '/auth/login';
-          }
-        }
-
-        const errorMessage = error.response?.data?.message || error.message || 'Unknown error occurred';
-        return Promise.reject(new Error(errorMessage));
-      }
-    );
-  }
-
-  private getToken(): string | null {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-    try {
-      return localStorage.getItem('authToken');
-    } catch {
-      return null;
-    }
-  }
-
-  setToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('authToken', token);
-    } catch (error) {
-      console.error('Error storing token:', error);
-    }
-  }
-
-  clearToken(): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.removeItem('authToken');
-    } catch (error) {
-      console.error('Error clearing token:', error);
-    }
+  constructor() {
+    // Use the shared apiClient from your main api.ts file
+    // This ensures consistent base URL, interceptors, and error handling
+    this.api = apiClient;
   }
 
   // ==================== FARMER ENDPOINTS ====================
@@ -400,18 +331,15 @@ class ProjectApiClient {
     return response.data;
   }
 
-  
   async getAllProjectsForGovernment(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/government/dashboard');
     return response.data;
   }
 
-
   async getProjectsByDepartment(department: GovernmentDepartment): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>(`/projects/department/${department}`);
     return response.data;
   }
-
 
   async getMyDepartmentProjects(): Promise<DepartmentProjectsResponse> {
     const response = await this.api.get<DepartmentProjectsResponse>('/projects/my-department');
@@ -422,7 +350,6 @@ class ProjectApiClient {
     const response = await this.api.get<DepartmentRecommendations>(`/projects/department-recommendations/${category}`);
     return response.data;
   }
-
 
   async getPendingProjects(): Promise<Project[]> {
     const response = await this.api.get<Project[]>('/projects/pending/review');
@@ -502,13 +429,13 @@ class ProjectApiClient {
     return response.data;
   }
 
-  // ✅ ADDED: Get government-specific dashboard stats
+  //  Get government-specific dashboard stats
   async getGovernmentDashboardStats(): Promise<GovernmentDashboard> {
     const response = await this.api.get<GovernmentDashboard>('/projects/government/dashboard');
     return response.data;
   }
 
-  // ✅ ADDED: Get detailed project statistics
+  //  Get detailed project statistics
   async getProjectStatistics(): Promise<ProjectStats> {
     const response = await this.api.get<ProjectStats>('/projects/stats/dashboard');
     return response.data;
@@ -568,7 +495,6 @@ class ProjectApiClient {
     const response = await this.api.get('/projects/debug/user-info');
     return response.data;
   }
-  
 
   async debugAllProjects(): Promise<DebugProjectInfo[]> {
     const response = await this.api.get<DebugProjectInfo[]>('/projects/debug/all');
@@ -576,29 +502,33 @@ class ProjectApiClient {
   }
 
   // Test API connectivity
-async testConnection(): Promise<{ success: boolean; message: string; timestamp?: string }> {
-  try {
-    await this.api.get('/health');
-    return {
-      success: true,
-      message: 'API connection successful',
-      timestamp: new Date().toISOString()
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'API connection failed';
-    return {
-      success: false,
-      message: errorMessage,
-      timestamp: new Date().toISOString()
-    };
+  async testConnection(): Promise<{ success: boolean; message: string; timestamp?: string }> {
+    try {
+      await this.api.get('/health');
+      return {
+        success: true,
+        message: 'API connection successful',
+        timestamp: new Date().toISOString()
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'API connection failed';
+      return {
+        success: false,
+        message: errorMessage,
+        timestamp: new Date().toISOString()
+      };
+    }
   }
-}
-  
 
   // ==================== BLOCKCHAIN METHODS ====================
 
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    if (typeof window === 'undefined') return false;
+    try {
+      return !!localStorage.getItem('authToken');
+    } catch {
+      return false;
+    }
   }
 
   async getBlockchainStatus(projectId: string): Promise<BlockchainProjectStatus> {
@@ -636,7 +566,6 @@ async testConnection(): Promise<{ success: boolean; message: string; timestamp?:
       };
     }
   }
-  
 
   /**
    * Check if project is ready for contributions
