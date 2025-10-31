@@ -83,7 +83,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         return;
       }
   
-      // ✅ FIXED: Use the correct endpoint with /contributions suffix
+      //  Use the correct endpoint with /contributions suffix
       const response = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/contributions/project/${project._id}/contributions`,
         {
@@ -123,7 +123,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
     return colors[status] || 'gray';
   };
 
-  // Add this at the top of your ProjectCard component
 useEffect(() => {
   // Catch any unhandled errors
   const handleError = (event: ErrorEvent) => {

@@ -16,12 +16,164 @@ RootRise is a blockchain-powered agricultural funding platform connecting farmer
 🔗 [https://alu-mission-capstone-zc78.vercel.app](https://alu-mission-capstone-zc78.vercel.app)
 
 **Backend API (Render)**
-🔗 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/health)
+🔗 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/api)
 
 **API Documentation (Swagger)**
 📚 [https://rootrise.onrender.com/api](https://rootrise.onrender.com/api)
 
 **Database:** MongoDB Atlas
+
+---
+
+## Environment Setup
+
+### Backend Configuration
+
+Create `.env` file in the `backend` directory:
+
+```bash
+# Backend Environment Configuration
+
+# Server Configuration
+NODE_ENV=development
+PORT=3001
+
+# JWT Configuration - Generate a strong secret
+JWT_SECRET=your-super-secure-jwt-secret-key-here-minimum-32-characters
+JWT_EXPIRES_IN=7d
+
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017/rootrise
+
+# CORS Configuration
+FRONTEND_URL=http://localhost:3000
+
+# API Documentation
+API_TITLE=RootRise API
+API_DESCRIPTION=Blockchain-based Agricultural Crowdfunding Platform API
+API_VERSION=1.0
+
+# Email Configuration (Optional - for email verification)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+EMAIL_FROM=your-email@gmail.com
+
+# Cloudinary Configuration (Optional - for image uploads)
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+
+# Email Verification Settings
+EMAIL_VERIFICATION_TOKEN_EXPIRES=24h
+VERIFICATION_URL=http://localhost:3000/verify-email
+
+# ================================
+# 🟣 POLYGON BLOCKCHAIN CONFIGURATION
+# ================================
+
+# Polygon RPC URL
+POLYGON_RPC_URL=https://polygon-rpc.com
+
+# Wallet Private Key (Use a test wallet for development)
+WALLET_PRIVATE_KEY=your-test-wallet-private-key-here
+
+# Smart Contract Address
+CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
+
+# Polygon Network ID
+NETWORK_ID=137
+
+# Admin Wallet Address
+ADMIN_WALLET_ADDRESS=0x0000000000000000000000000000000000000000
+
+# Polygonscan API Key (Optional)
+POLYGONSCAN_API_KEY=your-polygonscan-api-key
+```
+
+### Frontend Configuration
+
+Create `.env.local` file in the `frontend` directory:
+
+```bash
+# Frontend Environment Configuration
+
+# Application Configuration
+NEXT_PUBLIC_APP_NAME="RootRise - Agricultural Crowdfunding"
+NEXT_PUBLIC_APP_DESCRIPTION="Transparent blockchain-based crowdfunding for Rwandan farmers"
+NEXT_PUBLIC_ENABLE_TESTNETS=true
+NEXT_PUBLIC_DEBUG_MODE=true
+
+# API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+
+# ================================
+# 🟣 POLYGON BLOCKCHAIN CONFIGURATION
+# ================================
+
+# Polygon Network
+NEXT_PUBLIC_CHAIN_ID=137
+NEXT_PUBLIC_NETWORK_NAME=polygon
+NEXT_PUBLIC_POLYGON_RPC_URL=https://polygon-rpc.com
+
+# Smart Contract Address
+NEXT_PUBLIC_ROOTRISE_CONTRACT=0x0000000000000000000000000000000000000000
+
+# WalletConnect (RainbowKit) - Get from https://cloud.walletconnect.com/
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
+
+# Cloudinary Configuration (Optional)
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=your-upload-preset
+
+# Database (Only if needed for frontend)
+MONGODB_URI=mongodb://localhost:27017/rootrise
+```
+
+### Setup Instructions
+
+1. **Backend Setup:**
+   ```bash
+   cd backend
+   cp .env.example .env
+   # Edit .env with your configuration
+   npm install
+   npm run start:dev
+   ```
+
+2. **Frontend Setup:**
+   ```bash
+   cd frontend
+   cp .env.local.example .env.local
+   # Edit .env.local with your configuration
+   npm install
+   npm run dev
+   ```
+
+### Required Configuration Steps:
+
+1. **Generate JWT Secret:**
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. **Get WalletConnect Project ID:**
+   - Visit https://cloud.walletconnect.com/
+   - Create a new project
+   - Copy the Project ID
+
+3. **Setup MongoDB:**
+   - Use local MongoDB or MongoDB Atlas
+   - Update connection string in `MONGODB_URI`
+
+4. **Blockchain Setup:**
+   - Use test wallet for development
+   - Deploy smart contract for production
+   - Update contract address
 
 ---
 
@@ -219,3 +371,8 @@ alu_mission_capstone/
 
 ---
 
+### License
+
+MIT License - see LICENSE file for details
+
+---

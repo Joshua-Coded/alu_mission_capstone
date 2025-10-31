@@ -85,7 +85,7 @@ const ProjectDetailsModal: React.FC<ProjectDetailsModalProps> = ({
   const [refreshingBlockchain, setRefreshingBlockchain] = useState(false);
   const toast = useToast();
 
-  // Move all useColorModeValue hooks to the top - unconditionally
+
   const statBgColor = useColorModeValue('gray.50', 'gray.700');
   const alertBgColors = {
     info: useColorModeValue('blue.50', 'blue.900'),
