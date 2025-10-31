@@ -315,6 +315,7 @@ class ContributionApiClient {
     }
   }
 
+
   async isProjectReadyForContributions(projectId: string): Promise<ApiResponse<{
     ready: boolean;
     reason?: string;
@@ -322,9 +323,19 @@ class ContributionApiClient {
     blockchainInfo?: unknown;
   }>> {
     try {
-      const projectResponse = await this.api.get(`${this.api.defaults.baseURL}/projects/${projectId}`);
+      // ✅ FIX: Use the proper API route through your proxy
+      const projectResponse = await this.api.get(`/projects/${projectId}`);
+      
+      if (!projectResponse.data) {
+        return {
+          success: false,
+          error: 'Project not found'
+        };
+      }
+
       const project = projectResponse.data;
 
+      // Check project status
       if (!['active', 'verified'].includes(project.status)) {
         return {
           success: true,
@@ -336,6 +347,7 @@ class ContributionApiClient {
         };
       }
 
+      // Check blockchain deployment
       if (project.blockchainProjectId === null || project.blockchainProjectId === undefined) {
         return {
           success: true,
@@ -347,6 +359,7 @@ class ContributionApiClient {
         };
       }
 
+      // Check blockchain status
       if (project.blockchainStatus !== 'created') {
         return {
           success: true,
@@ -358,6 +371,7 @@ class ContributionApiClient {
         };
       }
 
+      // Check if already funded
       if (project.currentFunding >= project.fundingGoal) {
         return {
           success: true,
@@ -369,6 +383,7 @@ class ContributionApiClient {
         };
       }
 
+      // Project is ready!
       return {
         success: true,
         data: {
@@ -377,10 +392,22 @@ class ContributionApiClient {
         }
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to check project status';
+      console.error('❌ Error checking project readiness:', error);
+      
+      let errorMessage = 'Failed to check project status';
+      let statusCode;
+      
+      if (error instanceof AxiosError) {
+        errorMessage = error.response?.data?.message || error.message;
+        statusCode = error.response?.status;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
+        statusCode
       };
     }
   }
@@ -404,14 +431,23 @@ class ContributionApiClient {
     network: NetworkInfo;
   }>> {
     try {
+      // First check if project is ready
       const readinessCheck = await this.isProjectReadyForContributions(projectId);
-      if (!readinessCheck.success || !readinessCheck.data?.ready) {
+      if (!readinessCheck.success) {
+        return {
+          success: false,
+          error: readinessCheck.error
+        };
+      }
+
+      if (!readinessCheck.data?.ready) {
         return {
           success: false,
           error: readinessCheck.data?.reason || 'Project not ready for contributions'
         };
       }
 
+      // Then get contribution info
       const contributionInfo = await this.getProjectContributionInfo(projectId);
       if (!contributionInfo.success) {
         return {
@@ -429,6 +465,7 @@ class ContributionApiClient {
         isFullyFunded
       } = contributionInfo.data!;
 
+      // Validate transaction parameters
       const validation = this.validateTransactionParams({
         amount,
         blockchainProjectId,
@@ -443,6 +480,7 @@ class ContributionApiClient {
         };
       }
 
+      // Build transaction data
       const transactionData = this.buildContributeData(blockchainProjectId);
       const valueHex = this.parseMaticToWeiHex(amount);
 

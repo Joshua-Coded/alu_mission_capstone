@@ -96,52 +96,118 @@ export default function ContributionModal({
 
   useEffect(() => {
     const checkProjectAndFetchInfo = async () => {
-      if (!initialProject?._id) return;
+      if (!initialProject?._id) {
+        console.error('❌ No project ID provided');
+        setError('No project selected');
+        setLoadingInfo(false);
+        return;
+      }
       
       try {
         setLoadingInfo(true);
         setError(null);
         setStep('checking');
-  
-        // ✅ FIX: Get fresh project data first
+        setProjectReady(false);
+    
+        console.log('🔍 Checking project readiness for:', initialProject._id);
+    
+        // Step 1: Check if project is ready for contributions
         const readinessResult = await contributionApi.isProjectReadyForContributions(initialProject._id);
         
+        console.log('📋 Readiness result:', readinessResult);
+    
         if (!readinessResult.success) {
-          throw new Error(readinessResult.error || 'Failed to check project status');
+          const errorMsg = readinessResult.error || 'Failed to check project status';
+          console.error('❌ Project readiness check failed:', errorMsg);
+          throw new Error(errorMsg);
         }
-  
+    
         if (!readinessResult.data) {
+          console.error('❌ No project readiness data received');
           throw new Error('No project readiness data received');
         }
-  
+    
         setReadinessCheck(readinessResult.data);
-  
-        // ✅ FIX: Update project state with fresh data immediately
+    
+        // Update project state with fresh data
         if (readinessResult.data.project && typeof readinessResult.data.project !== 'string') {
-          setProject(readinessResult.data.project as Project);
-          console.log('✅ Updated project data:', readinessResult.data.project);
+          const freshProject = readinessResult.data.project as Project;
+          setProject(freshProject);
+          console.log('✅ Updated project data:', {
+            id: freshProject._id,
+            title: freshProject.title,
+            status: freshProject.status,
+            blockchainProjectId: freshProject.blockchainProjectId,
+            blockchainStatus: freshProject.blockchainStatus,
+            currentFunding: freshProject.currentFunding,
+            fundingGoal: freshProject.fundingGoal
+          });
         }
-  
+    
+        // Check if project is ready
         if (!readinessResult.data.ready) {
-          setError(readinessResult.data.reason || 'Project not ready for contributions');
+          const reason = readinessResult.data.reason || 'Project not ready for contributions';
+          console.log('⚠️ Project not ready:', reason);
+          
+          setError(reason);
           setProjectReady(false);
+          setStep('input');
+          
+          // Show appropriate toast based on reason
+          let toastStatus: "success" | "warning" | "error" = "warning";
+          let toastTitle = "Project Not Ready";
+          
+          if (reason.includes('fully funded') || reason.includes('completed')) {
+            toastStatus = "success";
+            toastTitle = "Project Fully Funded!";
+          } else if (reason.includes('not active')) {
+            toastStatus = "warning";
+            toastTitle = "Project Inactive";
+          } else if (reason.includes('not yet deployed')) {
+            toastStatus = "info";
+            toastTitle = "Deployment in Progress";
+          }
+          
+          toast({
+            title: toastTitle,
+            description: reason,
+            status: toastStatus,
+            duration: 5000,
+            isClosable: true,
+          });
+          
           setLoadingInfo(false);
           return;
         }
-  
+    
+        // Project is ready, proceed to get contribution info
+        console.log('✅ Project is ready for contributions');
         setProjectReady(true);
-  
-        // ✅ Now fetch contribution info with fresh project data
+    
+        // Step 2: Get detailed contribution information
+        console.log('📊 Fetching contribution info...');
         const infoResult = await contributionApi.getProjectContributionInfo(initialProject._id);
         
+        console.log('📋 Contribution info result:', infoResult);
+    
         if (infoResult.success && infoResult.data) {
           setContributionInfo(infoResult.data);
-          console.log('📊 Contribution Info:', infoResult.data);
+          console.log('✅ Contribution info loaded:', {
+            blockchainProjectId: infoResult.data.blockchainProjectId,
+            contractAddress: infoResult.data.contractAddress,
+            farmerWalletAddress: infoResult.data.farmerWalletAddress,
+            currentFunding: infoResult.data.currentFunding,
+            fundingGoal: infoResult.data.fundingGoal,
+            isFullyFunded: infoResult.data.isFullyFunded,
+            isActive: infoResult.data.isActive
+          });
           
-          // ✅ Double-check if project is fully funded
+          // Final check if project is fully funded
           if (infoResult.data.isFullyFunded) {
+            console.log('🎉 Project is fully funded');
             setError('🎉 This project is fully funded! Goal reached.');
             setProjectReady(false);
+            
             toast({
               title: 'Project Fully Funded!',
               description: 'This project has reached its funding goal.',
@@ -149,42 +215,67 @@ export default function ContributionModal({
               duration: 5000,
               isClosable: true,
             });
+            
             setStep('input');
             setLoadingInfo(false);
             return;
           }
           
-          // Project is ready, move to input step
+          // All checks passed, project is ready for contributions
+          console.log('🚀 Project ready for contributions - moving to input step');
           setStep('input');
+          
         } else {
-          throw new Error(infoResult.error || 'Failed to load contribution details');
+          const errorMsg = infoResult.error || 'Failed to load contribution details';
+          console.error('❌ Failed to load contribution info:', errorMsg);
+          throw new Error(errorMsg);
         }
+    
       } catch (error: unknown) {
         console.error('❌ Failed to check project:', error);
         
-        let errorMessage = error instanceof Error ? error.message : 'Failed to load contribution details';
+        let errorMessage = 'Failed to load project details';
+        let toastStatus: "error" | "warning" = "error";
         
-        // Better error messages
-        if (errorMessage.includes('fully funded') || errorMessage.includes('completed')) {
-          errorMessage = '🎉 This project is fully funded! Goal reached and funds released to farmer.';
-        } else if (errorMessage.includes('not yet deployed')) {
-          errorMessage = '⏳ Project is being deployed to blockchain. Please try again in a few minutes.';
-        } else if (errorMessage.includes('not active')) {
-          errorMessage = '⚠️ Project is not currently active for contributions.';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          
+          // Better error messages for common cases
+          if (errorMessage.includes('fully funded') || errorMessage.includes('completed')) {
+            errorMessage = '🎉 This project is fully funded! Goal reached and funds released to farmer.';
+            toastStatus = "success";
+          } else if (errorMessage.includes('not yet deployed')) {
+            errorMessage = '⏳ Project is being deployed to blockchain. Please try again in a few minutes.';
+            toastStatus = "info";
+          } else if (errorMessage.includes('not active')) {
+            errorMessage = '⚠️ Project is not currently active for contributions.';
+            toastStatus = "warning";
+          } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+            errorMessage = '❌ Project not found. Please refresh the page and try again.';
+          } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+            errorMessage = '🔐 Please log in to contribute to projects.';
+          } else if (errorMessage.includes('Network Error') || errorMessage.includes('Failed to fetch')) {
+            errorMessage = '🌐 Network connection issue. Please check your internet connection.';
+          }
         }
         
+        console.error('❌ Setting error state:', errorMessage);
         setError(errorMessage);
         setProjectReady(false);
         setStep('input');
         
         toast({
-          title: errorMessage.includes('🎉') ? 'Project Fully Funded!' : 'Cannot Accept Contributions',
+          title: toastStatus === "success" ? 'Project Fully Funded!' : 
+                 toastStatus === "info" ? 'Deployment in Progress' : 
+                 toastStatus === "warning" ? 'Project Not Ready' : 'Error',
           description: errorMessage,
-          status: errorMessage.includes('🎉') ? 'success' : 'warning',
+          status: toastStatus,
           duration: 7000,
           isClosable: true,
         });
+        
       } finally {
+        console.log('🏁 Finished project check, setting loading to false');
         setLoadingInfo(false);
       }
     };
