@@ -154,7 +154,7 @@ export default function ContributionModal({
           setStep('input');
           
           // Show appropriate toast based on reason
-          let toastStatus: "success" | "warning" | "error" = "warning";
+          let toastStatus: "success" | "warning" | "error" | "info" = "warning";
           let toastTitle = "Project Not Ready";
           
           if (reason.includes('fully funded') || reason.includes('completed')) {
@@ -235,7 +235,7 @@ export default function ContributionModal({
         console.error('❌ Failed to check project:', error);
         
         let errorMessage = 'Failed to load project details';
-        let toastStatus: "error" | "warning" = "error";
+        let toastStatus: "error" | "warning" | "success" | "info" = "error";
         
         if (error instanceof Error) {
           errorMessage = error.message;
