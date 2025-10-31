@@ -180,13 +180,27 @@ export default function ProjectDetailsPage() {
       
       if (result.success && result.data) {
         setBlockchainData(result.data);
+      } else if (result.error?.includes('rate limit') || result.error?.includes('blockchain')) {
+        console.warn('Blockchain rate limit reached - using fallback data');
+        // Use basic project data as fallback
+        setBlockchainData(null);
+        toast({
+          title: 'Blockchain Data Limited',
+          description: 'Real-time blockchain data is temporarily unavailable. Showing basic project information.',
+          status: 'warning',
+          duration: 5000,
+        });
+      } else {
+        console.warn('Blockchain data not available:', result.error);
+        setBlockchainData(null);
       }
     } catch (error) {
       console.error('Failed to fetch blockchain data:', error);
+      setBlockchainData(null);
     } finally {
       setLoadingBlockchain(false);
     }
-  }, []);
+  }, [toast]);
 
   const fetchContributions = useCallback(async (projectId: string) => {
     try {
