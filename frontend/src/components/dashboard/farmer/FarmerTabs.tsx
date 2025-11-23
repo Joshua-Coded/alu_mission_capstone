@@ -174,11 +174,11 @@ export const ProjectsTab = () => {
     loadProjects();
     
     // Set up refresh interval (every 30 seconds)
-    const interval = setInterval(() => {
-      loadProjects(false);
-    }, 30000);
+    // const interval = setInterval(() => {
+    //   loadProjects(false);
+    // }, 30000);
     
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
   }, [loadProjects]);
 
   const handleViewDetails = (project: Project) => {

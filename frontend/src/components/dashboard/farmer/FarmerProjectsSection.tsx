@@ -1,7 +1,7 @@
 import CreateProjectModal from "./CreateProjectModal";
 import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FiChevronDown, FiFilter, FiPlus, FiRefreshCw } from "react-icons/fi";
 import { Project as ApiProject, ProjectStatus, projectApi } from "../../../lib/projectApi";
@@ -144,12 +144,12 @@ const FarmerProjectsSection: React.FC = () => {
     loadProjects();
     
     // Auto-refresh every 30 seconds to catch status changes
-    const interval = setInterval(() => {
-      console.log('🔄 Auto-refreshing projects...');
-      loadProjects(false);
-    }, 30000);
+    // const interval = setInterval(() => {
+    //   console.log('🔄 Auto-refreshing projects...');
+    //   loadProjects(false);
+    // }, 30000);
     
-    return () => clearInterval(interval);
+    // return () => clearInterval(interval);
   }, [loadProjects]); // Only run on mount
 
   // Filter projects based on URL parameter
