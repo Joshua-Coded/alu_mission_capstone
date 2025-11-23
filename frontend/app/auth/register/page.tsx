@@ -154,6 +154,7 @@ export default function RegisterPage() {
   });
 
   const watchedRole = watch('role');
+  const termsAccepted = watch('termsAccepted'); // Watch the checkbox state
 
   // Reset form when role changes
   useEffect(() => {
@@ -596,31 +597,61 @@ export default function RegisterPage() {
                   </FormControl>
                 </SimpleGrid>
 
-                {/* Terms and Conditions */}
+                {/* Terms and Conditions - UPDATED WITH LINKS */}
                 <FormControl isInvalid={!!errors.termsAccepted}>
                   <Checkbox {...register('termsAccepted')}>
                     <Text fontSize="sm">
-                      I agree to the <Link color="brand.500" textDecor="underline">Terms of Service</Link> and{' '}
-                      <Link color="brand.500" textDecor="underline">Privacy Policy</Link>
+                      I agree to the{' '}
+                      <Link 
+                        as={NextLink} 
+                        href="/policies" 
+                        color="brand.500" 
+                        textDecor="underline" 
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Terms of Service
+                      </Link>{' '}
+                      and{' '}
+                      <Link 
+                        as={NextLink} 
+                        href="/policies#privacy" 
+                        color="brand.500" 
+                        textDecor="underline" 
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Privacy Policy
+                      </Link>
                     </Text>
                   </Checkbox>
                   <FormErrorMessage>{errors.termsAccepted?.message}</FormErrorMessage>
                 </FormControl>
 
-                {/* Submit Button */}
+                {/* Submit Button - DISABLED WHEN TERMS NOT ACCEPTED */}
                 <Button
                   type="submit"
                   colorScheme="brand"
                   size="lg"
                   width="full"
                   isLoading={isLoading}
+                  isDisabled={!termsAccepted || isLoading}
                   loadingText={`Creating ${selectedRole} Account...`}
                   py={6}
                   fontSize="md"
                   fontWeight="semibold"
+                  opacity={!termsAccepted ? 0.6 : 1}
+                  cursor={!termsAccepted ? 'not-allowed' : 'pointer'}
                 >
-                  Create {selectedRole} Account
+                  {!termsAccepted ? '⚠️ Accept Terms to Continue' : `Create ${selectedRole} Account`}
                 </Button>
+
+                {/* Helper text for button */}
+                {!termsAccepted && (
+                  <Text fontSize="xs" color="gray.500" textAlign="center" mt={-3}>
+                    Please read and accept the Terms of Service and Privacy Policy to create your account
+                  </Text>
+                )}
               </VStack>
             </form>
 
@@ -636,10 +667,13 @@ export default function RegisterPage() {
             </Box>
           </Box>
 
-          {/* Footer */}
+          {/* Footer - UPDATED WITH POLICY LINK */}
           <Text color="gray.400" fontSize="xs" maxW="md" textAlign="center">
-            By registering, you agree to our Terms of Service and Privacy Policy. 
-            We prioritize data security and agricultural development in Rwanda.
+            By registering, you agree to our{' '}
+            <Link as={NextLink} href="/policies" color="brand.500" textDecor="underline">
+              Terms of Service and Privacy Policy
+            </Link>
+            . We prioritize data security and agricultural development in Rwanda.
           </Text>
         </VStack>
       </Container>

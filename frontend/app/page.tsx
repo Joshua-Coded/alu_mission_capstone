@@ -1,4 +1,5 @@
 "use client";
+import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
@@ -474,9 +475,30 @@ export default function LandingPage() {
               © 2024 RootRise. All rights reserved. Built with ❤️ for Rwanda&apos;s agricultural community.
             </Text>
             <HStack spacing={6} color="gray.400" fontSize="sm">
-              <Link _hover={{ color: 'white' }}>Privacy Policy</Link>
-              <Link _hover={{ color: 'white' }}>Terms of Service</Link>
-              <Link _hover={{ color: 'white' }}>Cookie Policy</Link>
+              <Link 
+                as={NextLink} 
+                href="/policies#privacy" 
+                _hover={{ color: 'white' }}
+                transition="color 0.2s"
+              >
+                Privacy Policy
+              </Link>
+              <Link 
+                as={NextLink} 
+                href="/policies#eula" 
+                _hover={{ color: 'white' }}
+                transition="color 0.2s"
+              >
+                Terms of Service
+              </Link>
+              <Link 
+                as={NextLink} 
+                href="/policies#copyright" 
+                _hover={{ color: 'white' }}
+                transition="color 0.2s"
+              >
+                Copyright Notice
+              </Link>
             </HStack>
           </Flex>
         </Container>
