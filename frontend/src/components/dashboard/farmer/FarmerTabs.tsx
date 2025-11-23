@@ -1,4 +1,5 @@
 import ActivityFeed from "./ActivityItem";
+import CreateProjectModal from "./CreateProjectModal";
 import FarmerProjectsSection from "./FarmerProjectsSection";
 import FarmerQuickActions from "./FarmerQuickActions";
 import FarmerStatsGrid from "./FarmerStatsGrid";
@@ -84,7 +85,7 @@ export const ActivityTab = () => (
 );
 
 // ============================================
-// PROJECTS TAB
+// PROJECTS TAB - UPDATED WITH MODAL
 // ============================================
 export const ProjectsTab = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -99,7 +100,9 @@ export const ProjectsTab = () => {
   const toast = useToast();
   const router = useRouter();
 
+  // Modal controls
   const { isOpen: isDetailsOpen, onOpen: onDetailsOpen, onClose: onDetailsClose } = useDisclosure();
+  const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
 
   const loadProjects = useCallback(async (showLoading = true) => {
     try {
@@ -172,13 +175,6 @@ export const ProjectsTab = () => {
   // Load projects on component mount
   useEffect(() => {
     loadProjects();
-    
-    // Set up refresh interval (every 30 seconds)
-    // const interval = setInterval(() => {
-    //   loadProjects(false);
-    // }, 30000);
-    
-    // return () => clearInterval(interval);
   }, [loadProjects]);
 
   const handleViewDetails = (project: Project) => {
@@ -187,7 +183,19 @@ export const ProjectsTab = () => {
   };
 
   const handleCreateProject = () => {
-    router.push('/dashboard/farmer/create-project');
+    onCreateOpen();
+  };
+
+  const handleProjectCreated = () => {
+    onCreateClose();
+    loadProjects(false);
+    toast({
+      title: 'Project Created! 🎉',
+      description: 'Your project has been submitted successfully',
+      status: 'success',
+      duration: 5000,
+      isClosable: true,
+    });
   };
 
   const handleRefresh = () => {
@@ -455,12 +463,19 @@ export const ProjectsTab = () => {
         )}
       </VStack>
 
+      {/* Create Project Modal */}
+      <CreateProjectModal 
+        isOpen={isCreateOpen} 
+        onClose={onCreateClose}
+        onProjectCreated={handleProjectCreated}
+      />
+
       {/* Project Details Modal */}
       <ProjectDetailsModal 
         isOpen={isDetailsOpen} 
         onClose={onDetailsClose} 
         project={selectedProject}
-        onProjectUpdate={handleRefresh} // Refresh the list when project is updated
+        onProjectUpdate={handleRefresh}
       />
     </>
   );
